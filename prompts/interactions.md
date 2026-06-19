@@ -865,3 +865,12 @@ There is also a UI app https://github.com/thomassuedbroecker/pdf_extraction_maco
 
 ---
 use the tax input folder to get pdfs ... this pdfs are real user data and are not allowed to be shared and referenced in the code
+---
+Install the Docling backend (pip install -e ".[docling]") and warm up models for best amount extraction.
+
+---
+don't forget you are running on a mac!
+
+/---
+Good reminder. macOS = Apple Silicon (arm64), so torch installs the MPS/CPU wheel (no CUDA), and OCR uses Homebrew Tesseract — both already accounted for. Let me check how the background install is progressing.
+/---

@@ -10,6 +10,7 @@ from invoice_sorter.metadata_extraction import (
     extract_iban,
     extract_invoice_number,
     extract_metadata,
+    extract_vendor,
     parse_amount,
 )
 
@@ -82,6 +83,15 @@ def test_english_metadata(config):
     assert m.vat_amount == Decimal("197.36")
     assert m.net_amount == Decimal("1037.20")
     assert m.currency == "USD"
+
+
+def test_vendor_matching_is_word_boundary_aware(config):
+    # "OBI" must NOT match inside "Mobilfunk"; the real vendor is Telekom.
+    text = "Rechnung von Telekom fuer DSL Internet Vertrag, Mobilfunk inklusive."
+    assert extract_vendor(text, config) == "Telekom"
+
+    # A bare "Mobilfunk" yields no vendor (no false OBI match).
+    assert extract_vendor("Mobilfunk Vertrag ohne Anbieter", config) is None
 
 
 def test_missing_values_stay_none(config):

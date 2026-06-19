@@ -189,11 +189,16 @@ def extract_iban(text: str) -> Optional[str]:
 
 def extract_vendor(text: str, config: Config) -> Optional[str]:
     """Vendor detection is config-driven: a configured vendor name found in the
-    text wins. We deliberately do not guess from arbitrary lines."""
+    text wins. We deliberately do not guess from arbitrary lines.
+
+    Matching is word-boundary aware so a short vendor token (e.g. ``OBI``) does
+    not match inside an unrelated word (e.g. ``M``**``obi``**``lfunk``).
+    """
     low = text.lower()
     for category in config.categories:
         for vendor in category.vendors:
-            if vendor.lower() in low:
+            pattern = r"(?<![\wäöüß])" + re.escape(vendor.lower()) + r"(?![\wäöüß])"
+            if re.search(pattern, low):
                 return vendor
     return None
 

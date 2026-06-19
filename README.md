@@ -30,10 +30,18 @@ Invoices contain sensitive personal and financial data, so:
 - **Dry-run mode** lets you preview every decision before any file is touched.
 - **Uncertain results are marked** and routed to a manual-review folder.
 
-> Note on Docling: if you enable the optional Docling backend, it may download
-> layout/OCR **models** from Hugging Face on first use. That is a one-time setup
-> download (no invoice data leaves your machine). To guarantee fully offline
-> runs afterwards, warm it up once and then set `HF_HUB_OFFLINE=1`.
+> Note on Docling: the optional Docling backend downloads layout/table/OCR
+> **models** on first use (Hugging Face + ModelScope for RapidOCR). That is a
+> one-time setup download — **no invoice data leaves your machine.** After a
+> one-time warm-up the tool runs **fully offline**; enforce it with:
+>
+> ```bash
+> export HF_HUB_OFFLINE=1
+> export TRANSFORMERS_OFFLINE=1
+> ```
+>
+> Verified on Apple Silicon (torch MPS): with these set, extraction runs with no
+> network access.
 
 ## 3. Installation
 
