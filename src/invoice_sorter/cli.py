@@ -18,6 +18,16 @@ from .performance_log import PERFORMANCE_LOG_NAME
 _DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "categories.yaml"
 
 
+def _temperature(value: str) -> float:
+    try:
+        temperature = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("temperature must be a number") from exc
+    if not 0.0 <= temperature <= 2.0:
+        raise argparse.ArgumentTypeError("temperature must be between 0.0 and 2.0")
+    return temperature
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="invoice-sorter",
@@ -57,6 +67,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--ai-base-url",
         default=os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL),
         help="Ollama base URL for --ai-review (default: http://127.0.0.1:11434)",
+    )
+    parser.add_argument(
+        "--ai-prompt",
+        help="Path to a custom AI review prompt template; use {json_data} for payload",
+    )
+    parser.add_argument(
+        "--ai-temperature",
+        type=_temperature,
+        default=0.2,
+        help="Ollama sampling temperature from 0.0 to 2.0 (default: 0.2)",
     )
     parser.add_argument("--verbose", action="store_true", help="Print more details")
     parser.add_argument("--version", action="version", version=f"invoice-sorter {__version__}")
@@ -136,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         ai_review=args.ai_review,
         ai_model=args.ai_model,
         ai_base_url=args.ai_base_url,
+        ai_prompt_path=Path(args.ai_prompt).expanduser() if args.ai_prompt else None,
+        ai_temperature=args.ai_temperature,
     )
 
     results, summary = run(options)

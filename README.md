@@ -122,6 +122,8 @@ Options:
 | `--ai-review` | Append an optional local Ollama sorting review to `invoice_summary.md` |
 | `--ai-model` | Ollama model for `--ai-review` (default: `OLLAMA_MODEL` or `llama3.2`) |
 | `--ai-base-url` | Ollama URL for `--ai-review` (default: `http://127.0.0.1:11434`) |
+| `--ai-prompt` | Custom AI review prompt template file; `{json_data}` inserts the inspection payload |
+| `--ai-temperature` | Ollama sampling temperature from `0.0` to `2.0` (default: `0.2`) |
 | `--verbose` | Print a per-file line (filenames; avoid when screen-sharing private data) |
 | `--version` | Print version and exit |
 
@@ -170,7 +172,8 @@ invoice-sorter \
   --backend auto \
   --dry-run \
   --ai-review \
-  --ai-model llama3.2
+  --ai-model llama3.2 \
+  --ai-temperature 0.2
 ```
 
 Privacy boundary: the AI review prompt is generated in application code and sends
@@ -184,6 +187,36 @@ anonymous IDs (`doc_001`, etc.). When Ollama is enabled, it also records model,
 total/load/prompt-evaluation/inference durations, and prompt/output/total token
 counts returned by Ollama. The Markdown report includes total extraction time and
 a compact Ollama inference/token summary.
+
+### Customize the AI inspection prompt
+
+The default runtime template is
+[`config/ai_review_prompt.txt`](config/ai_review_prompt.txt). Copy it to the
+git-ignored local override before editing:
+
+```bash
+cp config/ai_review_prompt.txt config/ai_review_prompt.local.txt
+```
+
+Keep `{json_data}` where the anonymized inspection payload should be inserted.
+If the placeholder is omitted, the application appends the JSON data after the
+custom instructions. Run with:
+
+```bash
+invoice-sorter \
+  --input "/path/to/input/folder" \
+  --output "/path/to/output/folder" \
+  --dry-run \
+  --ai-review \
+  --ai-model llama3.2 \
+  --ai-temperature 0.2 \
+  --ai-prompt config/ai_review_prompt.local.txt
+```
+
+The GUI exposes the same setting through the **AI review prompt** field and file
+picker, plus an **AI temperature** control. Lower values are more deterministic;
+higher values allow more variation. Files under `prompts/` remain development
+interaction history and are not used at runtime.
 
 ## 8. Configuring categories
 
@@ -283,6 +316,7 @@ german_tax_preorganizer/
   config/
     categories.yaml              # generic, committed
     categories.local.yaml        # git-ignored, your private vendors
+    ai_review_prompt.txt          # default runtime Ollama review template
   scripts/
     suggest_local_config.py      # build categories.local.yaml from a real folder
   src/invoice_sorter/
@@ -299,7 +333,7 @@ german_tax_preorganizer/
     performance_log.py           # anonymized extraction/Ollama timing + tokens
     report.py                    # Markdown report (RunSummary + build_report)
     config.py / constants.py / models.py
-  tests/                         # pytest (43 tests)
+  tests/                         # pytest (50 tests with GUI extra installed)
   examples/sample_invoice_summary.md
   tax_input_docs/                # git-ignored real invoices (not in repo)
 ```
@@ -312,5 +346,5 @@ The engine is UI-agnostic: both `cli.py` and `gui.py` call
 ```bash
 pip install -e ".[test]"
 python scripts/check_license_metadata.py
-pytest          # 43 tests
+pytest          # 50 tests with GUI extra installed
 ```

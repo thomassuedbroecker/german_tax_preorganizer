@@ -26,9 +26,10 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **47 pytest passing** after Codex regression tests for hybrid metadata,
+- ✅ **50 pytest passing** after Codex regression tests for hybrid metadata,
   local-config helper classification, backend selection, local AI review,
-  performance telemetry, GUI progress, and cancellation controls.
+  performance telemetry, GUI progress/cancellation/color controls, custom runtime
+  prompts, and temperature configuration.
 - ✅ Hybrid manual-review verification completed on the 38 local PDFs with output
   outside the repo at `/private/tmp/german_tax_preorganizer_hybrid_out`.
   Final aggregate result: **38 processed, 0 unsupported, 16 manual-review, 22
@@ -123,6 +124,18 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   writes partial report/audit/performance outputs. Final pytest -> **47 passed**.
 - Manual-review/unidentified GUI rows now use a dark red background with white
   text instead of yellow/black; failed rows remain light red.
+- Starting customizable local AI inspection prompts: add a runtime template under
+  `config/`, CLI/GUI prompt-file selection, and keep `prompts/` reserved for
+  interaction history.
+- Ollama temperature configuration was added to the active scope: CLI flag, GUI
+  numeric control, request option, and performance metrics.
+- Custom runtime AI prompt and temperature work completed. Default template is
+  `config/ai_review_prompt.txt`; CLI supports `--ai-prompt` and
+  `--ai-temperature`; GUI provides a prompt picker and temperature control.
+  `prompts/` remains interaction history only.
+- Final synthetic local-Ollama verification (`granite4:350m-h`, temperature
+  0.35): extraction 0.039s, inference 1.192s, 510 prompt tokens, 252 output
+  tokens, 762 total tokens. Full pytest -> **50 passed**.
 
 ## ⚠️ Privacy rules — do not break
 
@@ -200,13 +213,10 @@ Nothing from this continuation has been committed. Current changed files:
 - Modified: `src/invoice_sorter/ai_review.py`
 - Modified: `src/invoice_sorter/cli.py`
 - Modified: `src/invoice_sorter/gui.py`
-- Modified: `src/invoice_sorter/models.py`
 - Modified: `src/invoice_sorter/orchestrator.py`
-- Modified: `src/invoice_sorter/report.py`
 - Modified: `tests/test_ai_review.py`
 - Modified: `tests/test_cli_dry_run.py`
-- Modified: `tests/test_report.py`
-- Untracked: `src/invoice_sorter/performance_log.py`
-- Untracked: `tests/test_gui_controls.py`
+- Modified: `tests/test_gui_controls.py`
+- Untracked: `config/ai_review_prompt.txt`
 
 Repo is on `main` with one initial commit. Branch before committing.

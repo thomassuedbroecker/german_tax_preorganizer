@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
@@ -44,6 +45,7 @@ from .orchestrator import RunOptions, run
 from .report import REPORT_NAME
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "categories.yaml"
+_DEFAULT_AI_PROMPT = Path(__file__).resolve().parents[2] / "config" / "ai_review_prompt.txt"
 
 _COLUMNS = ["File", "Category", "Vendor", "Invoice Date", "Gross", "Currency",
             "Confidence", "Status", "Notes"]
@@ -111,10 +113,29 @@ class MainWindow(QMainWindow):
         form.addWidget(self._browse_btn(self.config_edit, folder=False), 2, 2)
         self.ai_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
         self.ai_url_edit = QLineEdit(DEFAULT_OLLAMA_URL)
+        self.ai_prompt_edit = QLineEdit(str(_DEFAULT_AI_PROMPT))
+        self.ai_temperature = QDoubleSpinBox()
+        self.ai_temperature.setRange(0.0, 2.0)
+        self.ai_temperature.setDecimals(2)
+        self.ai_temperature.setSingleStep(0.1)
+        self.ai_temperature.setValue(0.2)
         form.addWidget(QLabel("Ollama model"), 3, 0)
         form.addWidget(self.ai_model_edit, 3, 1)
         form.addWidget(QLabel("Ollama URL"), 4, 0)
         form.addWidget(self.ai_url_edit, 4, 1)
+        form.addWidget(QLabel("AI temperature"), 5, 0)
+        form.addWidget(self.ai_temperature, 5, 1)
+        form.addWidget(QLabel("AI review prompt"), 6, 0)
+        form.addWidget(self.ai_prompt_edit, 6, 1)
+        form.addWidget(
+            self._browse_btn(
+                self.ai_prompt_edit,
+                folder=False,
+                file_filter="Prompt templates (*.txt *.md);;All files (*)",
+            ),
+            6,
+            2,
+        )
         root.addLayout(form)
 
         # --- options ----------------------------------------------------
@@ -177,7 +198,13 @@ class MainWindow(QMainWindow):
         root.addWidget(self.table, 1)
 
     # --- helpers --------------------------------------------------------
-    def _browse_btn(self, target: QLineEdit, *, folder: bool) -> QPushButton:
+    def _browse_btn(
+        self,
+        target: QLineEdit,
+        *,
+        folder: bool,
+        file_filter: str = "YAML/JSON (*.yaml *.yml *.json)",
+    ) -> QPushButton:
         btn = QPushButton("Browse…")
 
         def choose() -> None:
@@ -185,7 +212,7 @@ class MainWindow(QMainWindow):
                 path = QFileDialog.getExistingDirectory(self, "Select folder")
             else:
                 path, _ = QFileDialog.getOpenFileName(
-                    self, "Select config", "", "YAML/JSON (*.yaml *.yml *.json)"
+                    self, "Select file", "", file_filter
                 )
             if path:
                 target.setText(path)
@@ -242,6 +269,12 @@ class MainWindow(QMainWindow):
             ai_review=self.ai_review.isChecked(),
             ai_model=self.ai_model_edit.text().strip() or DEFAULT_OLLAMA_MODEL,
             ai_base_url=self.ai_url_edit.text().strip() or DEFAULT_OLLAMA_URL,
+            ai_prompt_path=(
+                Path(self.ai_prompt_edit.text().strip()).expanduser()
+                if self.ai_prompt_edit.text().strip()
+                else None
+            ),
+            ai_temperature=self.ai_temperature.value(),
         )
         self._last_output = output_dir
 

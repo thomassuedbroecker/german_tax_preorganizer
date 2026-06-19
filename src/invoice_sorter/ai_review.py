@@ -21,6 +21,25 @@ from .report import RunSummary
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_OLLAMA_MODEL = "llama3.2"
+DEFAULT_PROMPT_TEMPLATE = """You are reviewing the output of a local invoice sorting tool for a tax
+preparation workflow.
+
+Use only the JSON data below. Do not invent vendors, dates, amounts, or tax
+advice. Do not ask for file text; full invoice text is unavailable by design.
+
+Write a concise Markdown review with these sections:
+
+1. Overall result
+2. Sorting quality
+3. Manual review priorities
+4. Configuration improvements
+5. Cautions for the tax advisor
+
+Keep it practical and specific to the counts and confidence signals.
+
+JSON data:
+{json_data}
+"""
 
 
 @dataclass
@@ -29,6 +48,8 @@ class AiReviewOptions:
     model: str = DEFAULT_OLLAMA_MODEL
     base_url: str = DEFAULT_OLLAMA_URL
     timeout_seconds: float = 60.0
+    prompt_template: str = DEFAULT_PROMPT_TEMPLATE
+    temperature: float = 0.2
 
 
 @dataclass
@@ -112,28 +133,27 @@ def _review_payload(results: list[DocumentResult], summary: RunSummary) -> dict[
     }
 
 
-def build_prompt(results: list[DocumentResult], summary: RunSummary) -> str:
+def load_prompt_template(path: Path) -> str:
+    template = Path(path).read_text(encoding="utf-8").strip()
+    if not template:
+        raise ValueError(f"AI review prompt is empty: {path}")
+    return template
+
+
+def build_prompt(
+    results: list[DocumentResult],
+    summary: RunSummary,
+    template: str = DEFAULT_PROMPT_TEMPLATE,
+) -> str:
     """Build the runtime prompt for the local AI review.
 
     This is intentionally code-owned, not read from ``prompts/``. That directory
     documents development interaction history only.
     """
-    payload = _review_payload(results, summary)
-    return (
-        "You are reviewing the output of a local invoice sorting tool for a tax "
-        "preparation workflow.\n"
-        "Use only the JSON data below. Do not invent vendors, dates, amounts, or "
-        "tax advice. Do not ask for file text; full invoice text is unavailable "
-        "by design.\n\n"
-        "Write a concise Markdown review with these sections:\n"
-        "1. Overall result\n"
-        "2. Sorting quality\n"
-        "3. Manual review priorities\n"
-        "4. Configuration improvements\n"
-        "5. Cautions for the tax advisor\n\n"
-        "Keep it practical and specific to the counts and confidence signals.\n\n"
-        f"JSON data:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
-    )
+    payload = json.dumps(_review_payload(results, summary), ensure_ascii=False, indent=2)
+    if "{json_data}" in template:
+        return template.replace("{json_data}", payload)
+    return f"{template.rstrip()}\n\nJSON data:\n{payload}"
 
 
 def generate_review(
@@ -146,14 +166,14 @@ def generate_review(
     Raises ``RuntimeError`` with a short message if Ollama is unavailable or
     returns an invalid response. The caller decides whether that is fatal.
     """
-    prompt = build_prompt(results, summary)
+    prompt = build_prompt(results, summary, options.prompt_template)
     url = options.base_url.rstrip("/") + "/api/generate"
     request_body = {
         "model": options.model,
         "prompt": prompt,
         "stream": False,
         "options": {
-            "temperature": 0.2,
+            "temperature": options.temperature,
         },
     }
     request = urllib.request.Request(
@@ -185,6 +205,7 @@ def generate_review(
     output_tokens = int(data.get("eval_count") or 0)
     metrics = {
         "model": str(data.get("model") or options.model),
+        "temperature": options.temperature,
         "total_duration_seconds": seconds("total_duration"),
         "load_duration_seconds": seconds("load_duration"),
         "prompt_eval_duration_seconds": seconds("prompt_eval_duration"),

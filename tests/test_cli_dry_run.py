@@ -12,6 +12,7 @@ import pytest
 
 from invoice_sorter import orchestrator
 from invoice_sorter.ai_review import AiReviewResult
+from invoice_sorter.cli import build_parser
 from invoice_sorter.models import ExtractionResult, ExtractionStatus, ProcessingStatus
 from invoice_sorter.orchestrator import RunOptions
 
@@ -19,6 +20,19 @@ INTERNET_TEXT = (
     "Rechnung von Telekom fuer DSL Internet Vertrag. "
     "Rechnungsnummer 12345. Rechnungsdatum 01.01.2024. Gesamtbetrag 50,00 EUR."
 )
+
+
+def test_cli_ai_temperature_validation():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--input", "in", "--output", "out", "--ai-temperature", "0.75"]
+    )
+    assert args.ai_temperature == 0.75
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            ["--input", "in", "--output", "out", "--ai-temperature", "2.5"]
+        )
 
 
 @pytest.fixture

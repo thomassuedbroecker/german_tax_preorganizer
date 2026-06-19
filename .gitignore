@@ -222,6 +222,9 @@ __marimo__/
 # Real, private invoice input — never commit user tax data.
 /tax_input_docs/
 
+# May contain real data if user moves files here.
+/output_docs/  
+
 # Run outputs derived from real data — never commit.
 Sorted_Invoices/
 invoice_summary.md
@@ -233,6 +236,8 @@ invoice_summary.docx
 # Private, user-specific category overrides (may contain real vendor names).
 *.local.yaml
 *.local.yml
+config/ai_review_prompt.local.txt
 
 # Session log — may contain real invoice filenames/vendors. Keep local only.
 prompts/interactions.md
+.DS_Store

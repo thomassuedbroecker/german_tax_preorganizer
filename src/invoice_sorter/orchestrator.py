@@ -34,6 +34,8 @@ class RunOptions:
     ai_review: bool = False
     ai_model: str = ai_review_module.DEFAULT_OLLAMA_MODEL
     ai_base_url: str = ai_review_module.DEFAULT_OLLAMA_URL
+    ai_prompt_path: Path | None = None
+    ai_temperature: float = 0.2
     progress_callback: Callable[[int, int], None] | None = field(
         default=None, repr=False
     )
@@ -134,6 +136,11 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
 
     if options.ai_review:
         try:
+            prompt_template = ai_review_module.DEFAULT_PROMPT_TEMPLATE
+            if options.ai_prompt_path:
+                prompt_template = ai_review_module.load_prompt_template(
+                    options.ai_prompt_path
+                )
             ai_result = ai_review_module.generate_review(
                 results,
                 summary,
@@ -141,6 +148,8 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
                     enabled=True,
                     model=options.ai_model,
                     base_url=options.ai_base_url,
+                    prompt_template=prompt_template,
+                    temperature=options.ai_temperature,
                 ),
             )
             summary.ai_review = ai_result.text

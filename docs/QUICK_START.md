@@ -155,7 +155,8 @@ invoice-sorter \
   --backend auto \
   --dry-run \
   --ai-review \
-  --ai-model llama3.2
+  --ai-model llama3.2 \
+  --ai-temperature 0.2
 ```
 
 The AI review runs after sorting. It does not change categories, copy files, or
@@ -165,6 +166,25 @@ metadata only, never full invoice text.
 Ollama inference duration and prompt/output token counts are shown in the report
 and stored in `performance_log.json`. The same log includes anonymized
 per-document extraction and processing times.
+
+To customize the inspection instructions:
+
+```bash
+cp config/ai_review_prompt.txt config/ai_review_prompt.local.txt
+```
+
+Edit the local file and keep `{json_data}` where the anonymized payload should
+appear, then add:
+
+```bash
+--ai-prompt config/ai_review_prompt.local.txt
+```
+
+In the GUI, select the same file in **AI review prompt**.
+
+Set **AI temperature** in the GUI or use `--ai-temperature` in the CLI. Valid
+values are `0.0` to `2.0`; the default `0.2` favors consistent inspection
+summaries.
 
 ## 8. Offline Docling Run
 
