@@ -57,22 +57,33 @@ Optional backends/extras:
 
 ```bash
 pip install -e ".[light]"   # pdfplumber/pypdf + pytesseract image OCR (fallback)
-pip install -e ".[docling]" # Docling-first extraction (best tables/amounts; heavy)
+pip install -e ".[docling]" # Docling extraction (best tables/amounts; heavy)
+pip install -e ".[gui]"     # PySide6 desktop app
 pip install -e ".[docx]"    # DOCX export (planned)
 pip install -e ".[test]"    # pytest
+```
+
+The extraction backend is auto-selected at runtime: **Docling if installed**,
+otherwise the **light** backend, otherwise files are flagged for manual review.
+Check which is active with:
+
+```bash
+python -c "from invoice_sorter.extraction_adapter import active_backend; print(active_backend())"
 ```
 
 ## 4. Required system tools
 
 - **Python 3.12**
-- **Tesseract** — only needed to OCR image files / scanned PDFs. The tool runs
-  without it; image files are then flagged for manual review instead of crashing.
+- **Tesseract** — only used by the **light** backend to OCR image files /
+  scanned PDFs. The **Docling** backend bundles its own OCR (RapidOCR), so
+  Tesseract is not needed when Docling is installed. Without either, image files
+  are flagged for manual review instead of crashing.
 
-## 5. Installing Tesseract on macOS
+## 5. Installing Tesseract on macOS (light backend only)
 
 ```bash
 brew install tesseract
-brew install tesseract-lang   # adds German (deu) and other languages
+brew install tesseract-lang   # adds German (deu); the base install is eng-only
 ```
 
 ## 6. Running the CLI
@@ -96,6 +107,21 @@ Options:
 | `--recursive` / `--no-recursive` | Scan subfolders (default: on) |
 | `--move` | Move instead of copy (default: copy — safer) |
 | `--verbose` | Print a per-file line (filenames; avoid when screen-sharing private data) |
+| `--version` | Print version and exit |
+
+## 6b. Desktop app (GUI)
+
+A local PySide6 desktop app wraps the same engine:
+
+```bash
+pip install -e ".[gui]"
+invoice-sorter-gui
+```
+
+Pick input/output folders and a config, toggle **Dry run** (on by default),
+click **Run**. Results appear in a sortable table (manual-review rows highlighted
+amber, failures red, high-confidence green); buttons open the report and output
+folder. The work runs in a background thread so the window stays responsive.
 
 ## 7. How dry-run works
 
@@ -123,6 +149,28 @@ Folder names are derived automatically (umlauts transliterated, e.g.
 outside version control (or a git-ignored `*.local.yaml`) and pass it with
 `--config`. The bundled config intentionally contains only generic examples.
 
+### Tuning on your own folder
+
+[scripts/suggest_local_config.py](scripts/suggest_local_config.py) scans a real
+folder, finds the files that land in manual review, extracts candidate vendor
+tokens, auto-assigns well-known public vendors, and writes a **git-ignored**
+`config/categories.local.yaml`. It prints **only counts** — your vendor names go
+into the (git-ignored) file, never the console.
+
+```bash
+python scripts/suggest_local_config.py --input ./your_folder
+#   add --use-docling to extract with Docling instead of the light backend
+```
+
+Then open `config/categories.local.yaml`, move the `# REVIEW` vendor tokens
+under the right categories, and run with `--config config/categories.local.yaml`.
+
+> **Backend choice matters for sorting.** Empirically, the **light** backend
+> classifies these invoices *better* than Docling, because Docling's Markdown
+> output (table cells, `#` headers) disrupts keyword matching. **Docling is
+> better for amount/VAT extraction.** A good future split: extract amounts with
+> Docling, classify on normalized plain text.
+
 ## 9. Interpreting the confidence score
 
 | Score | Meaning |
@@ -148,16 +196,52 @@ with low confidence, or confidence is below the configured threshold.
 
 ## 11. Future improvements
 
-- Enable the **Docling** backend by default for better table/amount extraction.
-- Image/scanned-PDF **OCR** second pass.
+- **Hybrid extraction:** amounts via Docling, classification via normalized plain
+  text (best of both — see the note in §8).
 - Optional **DOCX** export for Apple Pages.
-- A simple local **GUI** (PySide6) and optional local **Ollama** LLM assist —
-  reusing the author's `pdf_extraction_macos` and `docling_preprocessor_factory`
-  projects.
+- Optional local **Ollama** LLM assist for classification (augmenting, not
+  replacing, the rule-based result), following the author's `pdf_extraction_macos`
+  project. The `docling_preprocessor_factory` repo can be wired into
+  `extraction_adapter._extract_with_factory` if preferred over plain Docling.
+- A GUI backend selector (light vs Docling).
+
+Done already: CLI, Docling backend, **PySide6 desktop GUI**, rule-based
+classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
+
+## Project structure
+
+```
+german_tax_preorganizer/
+  pyproject.toml                 # py3.12; extras: docling, light, gui, docx, test
+  config/
+    categories.yaml              # generic, committed
+    categories.local.yaml        # git-ignored, your private vendors
+  scripts/
+    suggest_local_config.py      # build categories.local.yaml from a real folder
+  src/invoice_sorter/
+    cli.py                       # `invoice-sorter` entry point
+    gui.py                       # `invoice-sorter-gui` entry point (PySide6)
+    orchestrator.py              # run(): scan -> per-file pipeline -> outputs
+    scanner.py                   # recursive file collection
+    extraction_adapter.py        # backend selection: factory -> docling -> light
+    metadata_extraction.py       # DE/EN amounts, dates, IBAN, invoice no., vendor
+    classifier.py                # keyword/vendor scoring + confidence
+    routing.py                   # confident category vs. manual review
+    file_operations.py           # safe copy, collision-resolving names
+    audit_log.py                 # JSONL writer
+    report.py                    # Markdown report (RunSummary + build_report)
+    config.py / constants.py / models.py
+  tests/                         # pytest (30 tests)
+  examples/sample_invoice_summary.md
+  tax_input_docs/                # git-ignored real invoices (not in repo)
+```
+
+The engine is UI-agnostic: both `cli.py` and `gui.py` call
+`orchestrator.run(RunOptions)` and render the returned `(results, summary)`.
 
 ## Development
 
 ```bash
 pip install -e ".[test]"
-pytest
+pytest          # 30 tests
 ```

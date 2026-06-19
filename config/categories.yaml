@@ -5,9 +5,15 @@
 #   vendors:  (optional) known vendor names; matching one also fills the
 #             "Vendor" field and scores the category more strongly.
 #
-# Categories are matched case-insensitively. Add your own categories or
-# keywords freely — the folder name is derived automatically (umlauts are
+# Categories are matched case-insensitively, with word boundaries (so "OBI"
+# does not match inside "Mobilfunk"). Add your own categories or keywords
+# freely — the folder name is derived automatically (umlauts are
 # transliterated, e.g. "Auto / Mobilität" -> "Auto_Mobilitaet").
+#
+# This file ships only a LEAN set of generic, publicly known vendors. Keep your
+# own private vendor names in a git-ignored "categories.local.yaml" (copy this
+# file) and pass it with --config. Avoid putting the same vendor under two
+# categories — that creates a tie and sends the file to manual review.
 
 settings:
   # Below this confidence the file goes to the manual-review category.

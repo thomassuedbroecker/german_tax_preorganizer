@@ -24,12 +24,16 @@ dependencies = [
 docling = ["docling>=2.20.0"]
 # Lightweight fallback backend so the prototype runs without Docling.
 light = ["pdfplumber>=0.11", "pypdf>=4.0", "pytesseract>=0.3.13", "Pillow>=10.0"]
-# Optional DOCX export (Phase 7) and tests.
+# Optional DOCX export (Phase 7), desktop GUI, and tests.
 docx = ["python-docx>=1.1"]
+gui = ["PySide6>=6.6"]
 test = ["pytest>=8.0"]
 
 [project.scripts]
 invoice-sorter = "invoice_sorter.cli:main"
+
+[project.gui-scripts]
+invoice-sorter-gui = "invoice_sorter.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
