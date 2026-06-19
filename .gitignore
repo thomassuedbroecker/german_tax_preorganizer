@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+### Custom additions below this line ###
+
+# Real, private invoice input — never commit user tax data.
+/tax_input_docs/
+
+# Run outputs derived from real data — never commit.
+Sorted_Invoices/
+invoice_summary.md
+audit_log.jsonl
+invoice_summary.docx
+# (the sanitized examples/sample_invoice_summary.md is intentionally tracked)

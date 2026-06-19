@@ -1,0 +1,114 @@
+"""Command-line interface for the invoice sorter."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections import Counter
+from pathlib import Path
+
+from . import __version__
+from .config import ConfigError, load_config
+from .extraction_adapter import active_backend
+from .orchestrator import RunOptions, run
+
+_DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "categories.yaml"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="invoice-sorter",
+        description="Local-first invoice sorter for tax preparation. "
+        "Scans a folder of PDFs/images, classifies invoices, copies them into "
+        "category folders, and writes a Markdown report + JSONL audit log.",
+    )
+    parser.add_argument("--input", required=True, help="Input folder with PDFs and images")
+    parser.add_argument("--output", required=True, help="Output folder for sorted invoices and reports")
+    parser.add_argument("--config", default=str(_DEFAULT_CONFIG), help="Path to category configuration (YAML/JSON)")
+    parser.add_argument("--dry-run", action="store_true", help="Analyze only; do not copy files")
+    parser.add_argument(
+        "--recursive", action=argparse.BooleanOptionalAction, default=True,
+        help="Scan subfolders (default: on; use --no-recursive to disable)",
+    )
+    parser.add_argument(
+        "--move", action="store_true",
+        help="Move files instead of copying (default: copy; copy is safer)",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Print more details")
+    parser.add_argument("--version", action="version", version=f"invoice-sorter {__version__}")
+    return parser
+
+
+def _print_summary(results, summary, options, verbose: bool) -> None:
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+        by_cat = Counter(r.category for r in results)
+        table = Table(title="Invoice Sorter — Summary")
+        table.add_column("Metric")
+        table.add_column("Value", justify="right")
+        table.add_row("Extraction backend", active_backend())
+        table.add_row("Mode", "DRY RUN" if summary.dry_run else ("MOVE" if options.move else "COPY"))
+        table.add_row("Total scanned", str(summary.total_scanned))
+        table.add_row("Processed", str(len(results)))
+        table.add_row("Unsupported (ignored)", str(len(summary.unsupported_files)))
+        console.print(table)
+
+        cat_table = Table(title="By category")
+        cat_table.add_column("Category")
+        cat_table.add_column("Files", justify="right")
+        for cat in sorted(by_cat):
+            cat_table.add_row(cat, str(by_cat[cat]))
+        console.print(cat_table)
+    except ImportError:  # rich not installed — plain fallback
+        print(f"Backend: {active_backend()}  Mode: "
+              f"{'DRY RUN' if summary.dry_run else ('MOVE' if options.move else 'COPY')}")
+        print(f"Scanned: {summary.total_scanned}  Processed: {len(results)}  "
+              f"Unsupported: {len(summary.unsupported_files)}")
+
+    if verbose:
+        for r in results:
+            print(f"  {r.source_path.name} -> {r.category} "
+                  f"(conf {r.confidence:.2f}, {r.status.value})")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    input_dir = Path(args.input).expanduser()
+    output_dir = Path(args.output).expanduser()
+
+    if not input_dir.is_dir():
+        print(f"error: input folder does not exist: {input_dir}", file=sys.stderr)
+        return 2
+
+    try:
+        config = load_config(args.config)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    options = RunOptions(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config=config,
+        dry_run=args.dry_run,
+        recursive=args.recursive,
+        move=args.move,
+    )
+
+    results, summary = run(options)
+    _print_summary(results, summary, options, verbose=args.verbose)
+
+    report_path = output_dir / "invoice_summary.md"
+    print(f"\nReport:    {report_path}")
+    print(f"Audit log: {output_dir / 'audit_log.jsonl'}")
+    if summary.dry_run:
+        print("Dry run — no files were copied.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
