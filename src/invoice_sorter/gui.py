@@ -262,8 +262,35 @@ class MainWindow(QMainWindow):
         if getattr(self, "_run_start", None):
             elapsed = int(time.time() - self._run_start)
             elapsed_text = f" · elapsed { _format_elapsed(elapsed) }"
+
+        # percent and ETA
+        percent_text = ""
+        eta_text = ""
+        if total:
+            pct = int(round((completed / total) * 100))
+            percent_text = f" · {pct}%"
+            if completed > 0 and getattr(self, "_run_start", None):
+                avg = (time.time() - self._run_start) / completed
+                remaining_secs = int(avg * max(total - completed, 0))
+                eta_text = f" · ETA { _format_elapsed(remaining_secs) }"
+
+        # current filename and unit/token info (if provided by orchestrator)
+        current_file = ""
+        tokens_text = ""
+        if self._worker and getattr(self._worker, "options", None):
+            opts = self._worker.options
+            fname = getattr(opts, "latest_filename", None)
+            units = getattr(opts, "latest_unit_count", None)
+            if fname:
+                current_file = f" · file {fname}"
+            if getattr(self, "_last_summary", None) and self._last_summary.ai_review_metrics:
+                tokens = self._last_summary.ai_review_metrics.get("total_tokens")
+                tokens_text = f" · tokens {tokens}"
+            elif units is not None:
+                tokens_text = f" · units {units}"
+
         self.summary_label.setText(
-            f"Working… processed {completed} · remaining {remaining} · total {total}{elapsed_text}"
+            f"Working… processed {completed} · remaining {remaining} · total {total}{percent_text}{eta_text}{elapsed_text}{current_file}{tokens_text}"
         )
 
     def _on_stop(self) -> None:

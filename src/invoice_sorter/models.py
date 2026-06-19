@@ -107,6 +107,7 @@ class DocumentResult:
     # Raw text is held transiently for the in-memory pipeline only. It is never
     # written to the audit log or the report (privacy requirement).
     text: str = field(default="", repr=False)
+    unit_count: int = 0
 
     def add_note(self, note: str) -> None:
         if note and note not in self.notes:

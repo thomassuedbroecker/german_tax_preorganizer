@@ -55,6 +55,11 @@ def process_file(source: Path, options: RunOptions) -> DocumentResult:
             result.extraction_time_seconds = round(
                 perf_counter() - extraction_started, 6
             )
+        # record unit_count on the result for UI/metrics
+        try:
+            result.unit_count = extraction.unit_count
+        except Exception:
+            result.unit_count = 0
         class_text = extraction.classify_text()
         # Hold the plain text for routing/length checks; amounts use rich text.
         result.text = class_text
@@ -120,6 +125,13 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
             cancelled = True
             break
         results.append(process_file(path, options))
+        # expose last-processed filename and unit_count for richer UI
+        try:
+            options.latest_filename = results[-1].source_path.name
+            options.latest_unit_count = results[-1].unit_count
+        except Exception:
+            options.latest_filename = None
+            options.latest_unit_count = None
         if options.progress_callback:
             options.progress_callback(index, total_documents)
         if options.cancel_check and options.cancel_check():
