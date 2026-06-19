@@ -1,5 +1,10 @@
 # Invoice Sorter
 
+[![Tests](https://github.com/thomassuedbroecker/german_tax_preorganizer/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/thomassuedbroecker/german_tax_preorganizer/actions/workflows/tests.yml)
+[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue.svg)](LICENSE)
+
+_Note: This README was developed with the help of AI._
+
 A **local-first** command-line tool that scans a folder of PDF and image
 invoices/receipts, extracts metadata, classifies each document into configurable
 categories, copies it into a category folder, and produces a Markdown summary for
@@ -242,6 +247,17 @@ Done already: CLI, Docling backend, hybrid extraction, backend selection,
 optional local Ollama report review, **PySide6 desktop GUI**, rule-based
 classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
 
+## 12. Licensing and provenance
+
+- Project license: [BSD 2-Clause](LICENSE)
+- License and redistribution policy: [LICENSE_POLICY.md](LICENSE_POLICY.md)
+- Direct dependency notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- AI-assisted development provenance: [CONTENT_PROVENANCE.md](CONTENT_PROVENANCE.md)
+
+Third-party packages and optional model artifacts retain their own terms. Before
+shipping a bundled application, generate a resolved dependency/SBOM report and
+review the exact PySide6/Qt, Docling, OCR, and model distribution configuration.
+
 ## Project structure
 
 ```
@@ -265,7 +281,7 @@ german_tax_preorganizer/
     audit_log.py                 # JSONL writer
     report.py                    # Markdown report (RunSummary + build_report)
     config.py / constants.py / models.py
-  tests/                         # pytest (30 tests)
+  tests/                         # pytest (43 tests)
   examples/sample_invoice_summary.md
   tax_input_docs/                # git-ignored real invoices (not in repo)
 ```
@@ -277,5 +293,6 @@ The engine is UI-agnostic: both `cli.py` and `gui.py` call
 
 ```bash
 pip install -e ".[test]"
-pytest          # 30 tests
+python scripts/check_license_metadata.py
+pytest          # 43 tests
 ```

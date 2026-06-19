@@ -74,6 +74,24 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   Local AI review checkbox plus Ollama model/URL fields.
 - Verified `.venv/bin/python -m pytest -q` -> **43 passed** after AI review
   changes.
+- Starting licensing transparency and GitHub Actions work. Found a license
+  mismatch: root `LICENSE` is BSD-2-Clause while `pyproject.toml` declares
+  Apache-2.0. The existing BSD-2-Clause license will be treated as authoritative
+  and project metadata/docs will be aligned to it.
+- Licensing/CI work completed: `pyproject.toml` now uses the SPDX expression
+  `BSD-2-Clause` and includes `LICENSE`; added `LICENSE_POLICY.md`,
+  `THIRD_PARTY_NOTICES.md`, and `CONTENT_PROVENANCE.md`.
+- Added `scripts/check_license_metadata.py`. It verifies project license
+  consistency, required transparency files, README links, and direct dependency
+  notice coverage.
+- Added `.github/workflows/tests.yml` for pushes to `main`, pull requests, and
+  manual runs. It uses Python 3.12, read-only contents permission, pip caching,
+  license checks, compileall, and pytest.
+- Final verification: editable package build/install succeeded; license checker
+  passed with 11 direct dependencies/extras covered; workflow YAML parsed;
+  compileall passed; pytest -> **43 passed**.
+- README test badge is pinned to the `main` branch and the top of README now
+  explicitly states that it was developed with AI assistance.
 
 ## ⚠️ Privacy rules — do not break
 
@@ -144,16 +162,13 @@ backend).
 
 Nothing from this continuation has been committed. Current changed files:
 
-- Modified: `docs/HANDOFF.md`
 - Modified: `README.md`
-- Modified: `src/invoice_sorter/cli.py`
-- Modified: `src/invoice_sorter/gui.py`
-- Modified: `src/invoice_sorter/orchestrator.py`
-- Modified: `src/invoice_sorter/report.py`
-- Modified: `tests/test_cli_dry_run.py`
-- Modified: `tests/test_report.py`
-- Modified: `docs/QUICK_START.md`
-- Untracked: `src/invoice_sorter/ai_review.py`
-- Untracked: `tests/test_ai_review.py`
+- Modified: `docs/HANDOFF.md`
+- Modified: `pyproject.toml`
+- Untracked: `.github/workflows/tests.yml`
+- Untracked: `CONTENT_PROVENANCE.md`
+- Untracked: `LICENSE_POLICY.md`
+- Untracked: `THIRD_PARTY_NOTICES.md`
+- Untracked: `scripts/check_license_metadata.py`
 
 Repo is on `main` with one initial commit. Branch before committing.

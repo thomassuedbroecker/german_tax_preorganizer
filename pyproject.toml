@@ -8,8 +8,12 @@ version = "0.1.0"
 description = "Local-first invoice sorter for German/English tax preparation (CLI-first, privacy-preserving)."
 readme = "README.md"
 requires-python = "==3.12.*"
-license = { text = "Apache-2.0" }
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
 authors = [{ name = "Thomas Suedbroecker" }]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+]
 
 # Core runtime deps are intentionally light. Text extraction backends are
 # optional extras so the CLI never crashes when a backend is missing.
