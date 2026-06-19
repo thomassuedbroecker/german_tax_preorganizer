@@ -13,9 +13,10 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 from threading import Event
+from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QTextDocument
+from PySide6.QtGui import QColor, QDesktopServices, QTextDocument, QTextCursor
 from PySide6.QtPrintSupport import QPrinter
 import csv
 import time
@@ -38,9 +39,19 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QInputDialog,
+    QDialog,
+    QTextEdit,
 )
 
 from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
+from .agent_client import (
+    AgentClientOptions,
+    request_document_advice,
+    request_executive_report,
+    request_executive_report_stream,
+)
+from .agent_service import DEFAULT_AGENT_HOST, DEFAULT_AGENT_PORT, AgentServerHandle, start_agent_server
 from .config import ConfigError, load_config
 from .extraction_adapter import active_backend
 from .models import UNKNOWN, ProcessingStatus
@@ -72,6 +83,28 @@ def _format_elapsed(seconds: int) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+class CorrectionLog:
+    """Track category changes for undo and export."""
+
+    def __init__(self) -> None:
+        self.changes: list[tuple[int, str, str]] = []  # (row, old_category, new_category)
+
+    def add_change(self, row: int, old_cat: str, new_cat: str) -> None:
+        self.changes.append((row, old_cat, new_cat))
+
+    def undo_last(self) -> tuple[int, str, str] | None:
+        return self.changes.pop() if self.changes else None
+
+    def clear(self) -> None:
+        self.changes.clear()
+
+    def as_csv(self) -> str:
+        lines = ["row,old_category,new_category"]
+        for row, old_cat, new_cat in self.changes:
+            lines.append(f"{row},{old_cat},{new_cat}")
+        return "\n".join(lines)
+
+
 class Worker(QObject):
     """Runs the pipeline off the UI thread."""
 
@@ -97,6 +130,31 @@ class Worker(QObject):
             self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
+class ExecReportWorker(QThread):
+    chunk_received = Signal(str)
+    finished = Signal()
+    error = Signal(str)
+
+    def __init__(self, summary: dict[str, Any], options: AgentClientOptions | None = None) -> None:
+        super().__init__()
+        self._summary = summary
+        self._options = options or AgentClientOptions()
+        self._stopped = False
+
+    def run(self) -> None:
+        try:
+            for chunk in request_executive_report_stream(self._summary, options=self._options):
+                if self._stopped:
+                    break
+                self.chunk_received.emit(chunk)
+            self.finished.emit()
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+    def stop(self) -> None:
+        self._stopped = True
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -106,6 +164,9 @@ class MainWindow(QMainWindow):
         self._worker: Worker | None = None
         self._last_output: Path | None = None
         self._run_start: float | None = None
+        self._agent_handle: AgentServerHandle | None = None
+        self._exec_worker: ExecReportWorker | None = None
+        self._correction_log: CorrectionLog = CorrectionLog()
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -150,6 +211,12 @@ class MainWindow(QMainWindow):
             6,
             2,
         )
+        self.agent_host_edit = QLineEdit("127.0.0.1")
+        self.agent_port_edit = QLineEdit("8080")
+        form.addWidget(QLabel("Agent host"), 7, 0)
+        form.addWidget(self.agent_host_edit, 7, 1)
+        form.addWidget(QLabel("Agent port"), 8, 0)
+        form.addWidget(self.agent_port_edit, 8, 1)
         root.addLayout(form)
 
         # --- options ----------------------------------------------------
@@ -192,12 +259,34 @@ class MainWindow(QMainWindow):
         self.exec_pdf_btn = QPushButton("Generate Exec PDF")
         self.exec_pdf_btn.clicked.connect(self._generate_exec_pdf)
         self.exec_pdf_btn.setEnabled(False)
+        self.agent_advice_btn = QPushButton("Document Advice")
+        self.agent_advice_btn.clicked.connect(self._request_document_advice)
+        self.agent_advice_btn.setEnabled(False)
+        self.agent_report_btn = QPushButton("Agent Exec Report")
+        self.agent_report_btn.clicked.connect(self._request_executive_report)
+        self.agent_report_btn.setEnabled(False)
+        self.edit_category_btn = QPushButton("Edit Category")
+        self.edit_category_btn.clicked.connect(self._edit_category)
+        self.edit_category_btn.setEnabled(False)
+        self.undo_btn = QPushButton("Undo Last Change")
+        self.undo_btn.clicked.connect(self._undo_last_change)
+        self.undo_btn.setEnabled(False)
+        self.export_corrections_btn = QPushButton("Export Corrections")
+        self.export_corrections_btn.clicked.connect(self._export_corrections)
+        self.export_corrections_btn.setEnabled(False)
+        self.agent_status_label = QLabel("Agent server: stopped")
         run_row.addWidget(self.run_btn)
         run_row.addWidget(self.stop_btn)
         run_row.addWidget(self.open_report_btn)
         run_row.addWidget(self.export_csv_btn)
         run_row.addWidget(self.exec_pdf_btn)
+        run_row.addWidget(self.agent_advice_btn)
+        run_row.addWidget(self.agent_report_btn)
+        run_row.addWidget(self.edit_category_btn)
+        run_row.addWidget(self.undo_btn)
+        run_row.addWidget(self.export_corrections_btn)
         run_row.addWidget(self.open_folder_btn)
+        run_row.addWidget(self.agent_status_label)
         run_row.addStretch(1)
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)  # indeterminate
@@ -217,7 +306,10 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSortingEnabled(True)
+        self.table.cellDoubleClicked.connect(self._open_selected_file)
         root.addWidget(self.table, 1)
+
+        self._start_agent_server()
 
     # --- helpers --------------------------------------------------------
     def _browse_btn(
@@ -249,6 +341,33 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 0)
             self.progress.setFormat("Preparing documents…")
         self.progress.setVisible(busy)
+
+    def _start_agent_server(self) -> None:
+        if self._agent_handle is not None:
+            return
+        host = self.agent_host_edit.text().strip() or DEFAULT_AGENT_HOST
+        port = int(self.agent_port_edit.text().strip() or str(DEFAULT_AGENT_PORT))
+        try:
+            self._agent_handle = start_agent_server(host=host, port=port)
+            self.agent_status_label.setText(f"Agent server: http://{host}:{port}")
+        except OSError as exc:
+            self.agent_status_label.setText("Agent server: failed to start")
+            QMessageBox.critical(self, "Agent startup failed", str(exc))
+            self._agent_handle = None
+
+    def _stop_agent_server(self) -> None:
+        if self._agent_handle is None:
+            return
+        try:
+            self._agent_handle.shutdown()
+        except Exception:
+            pass
+        self._agent_handle = None
+        self.agent_status_label.setText("Agent server: stopped")
+
+    def closeEvent(self, event) -> None:
+        self._stop_agent_server()
+        event.accept()
 
     def _on_progress(self, completed: int, total: int) -> None:
         maximum = max(total, 1)
@@ -365,6 +484,11 @@ class MainWindow(QMainWindow):
         self.open_folder_btn.setEnabled(True)
         self.export_csv_btn.setEnabled(True)
         self.exec_pdf_btn.setEnabled(True)
+        self.agent_advice_btn.setEnabled(True)
+        self.agent_report_btn.setEnabled(True)
+        self.edit_category_btn.setEnabled(True)
+        self.export_corrections_btn.setEnabled(True)
+        self._correction_log.clear()
         # Save for later export actions
         self._last_results = results
         self._last_summary = summary
@@ -404,18 +528,21 @@ class MainWindow(QMainWindow):
             is_failed = r.status == ProcessingStatus.FAILED
             for col, val in enumerate(values):
                 item = QTableWidgetItem(val)
+                if col == 0:
+                    item.setData(Qt.UserRole, str(r.source_path))
                 if is_failed:
                     item.setBackground(QColor(255, 224, 224))
                 elif is_manual:
                     item.setBackground(QColor(185, 28, 28))
                     item.setForeground(QColor(255, 255, 255))
-                # Confidence column (col 6): exact 1.0 -> dark green + white text,
-                # high confidence >= 0.9 -> light green.
+                # Confidence column (col 6): exact 1.0 -> strong green + white text,
+                # high confidence >= 0.9 -> pale green with dark text.
                 elif col == 6 and r.confidence >= 0.9999:
-                    item.setBackground(QColor(0, 100, 0))
+                    item.setBackground(QColor(0, 128, 0))
                     item.setForeground(QColor(255, 255, 255))
                 elif col == 6 and r.confidence >= 0.9:
-                    item.setBackground(QColor(224, 245, 224))
+                    item.setBackground(QColor(184, 255, 184))
+                    item.setForeground(QColor(0, 0, 0))
                 self.table.setItem(row, col, item)
         self.table.setSortingEnabled(True)
 
@@ -441,7 +568,7 @@ class MainWindow(QMainWindow):
             printer = QPrinter(QPrinter.HighResolution)
             printer.setOutputFormat(QPrinter.PdfFormat)
             printer.setOutputFileName(path)
-            doc.print(printer)
+            doc.print_(printer)
             QMessageBox.information(self, "PDF saved", f"Executive PDF written to {path}")
         except Exception as exc:
             QMessageBox.critical(self, "PDF generation failed", str(exc))
@@ -455,6 +582,186 @@ class MainWindow(QMainWindow):
     def _open_folder(self) -> None:
         if self._last_output:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._last_output)))
+
+    def _open_selected_file(self, row: int, column: int) -> None:
+        # If user double-clicked the Category column, allow editing the category.
+        if column == 1:
+            if not getattr(self, "_last_results", None):
+                return
+            try:
+                cfg = load_config(self.config_edit.text().strip() or str(_DEFAULT_CONFIG))
+                categories = cfg.category_names()
+            except Exception:
+                categories = []
+
+            current_item = self.table.item(row, 1)
+            current = current_item.text() if current_item is not None else ""
+            if categories:
+                # present a choice list
+                choice, ok = QInputDialog.getItem(self, "Select category", "Category:", categories, current.index(current) if current in categories else 0, False)
+                if ok and choice and choice != current:
+                    # track change in correction log
+                    self._correction_log.add_change(row, current, choice)
+                    self.undo_btn.setEnabled(True)
+                    # update table and underlying results if present
+                    if current_item is None:
+                        current_item = QTableWidgetItem(choice)
+                        self.table.setItem(row, 1, current_item)
+                    else:
+                        current_item.setText(choice)
+                    if getattr(self, "_last_results", None) and row < len(self._last_results):
+                        try:
+                            self._last_results[row].category = choice
+                        except Exception:
+                            pass
+            else:
+                text, ok = QInputDialog.getText(self, "Edit category", "Category:", text=current)
+                if ok and text and text != current:
+                    # track change in correction log
+                    self._correction_log.add_change(row, current, text)
+                    self.undo_btn.setEnabled(True)
+                    if current_item is None:
+                        current_item = QTableWidgetItem(text)
+                        self.table.setItem(row, 1, current_item)
+                    else:
+                        current_item.setText(text)
+                    if getattr(self, "_last_results", None) and row < len(self._last_results):
+                        try:
+                            self._last_results[row].category = text
+                        except Exception:
+                            pass
+            return
+
+        # otherwise open the source file for other columns (default behavior)
+        if not getattr(self, "_last_results", None):
+            return
+        item = self.table.item(row, 0)
+        if item is None:
+            return
+        source_path = item.data(Qt.UserRole)
+        if not source_path:
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(source_path)))
+    def _edit_category(self) -> None:
+        """Bulk edit categories: select a row and choose a new category."""
+        if not getattr(self, "_last_results", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first to edit categories.")
+            return
+        row = self.table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Select row", "Select one row first.")
+            return
+        # trigger double-click handling on the category column
+        self._open_selected_file(row, 1)
+
+    def _undo_last_change(self) -> None:
+        """Undo the last category change."""
+        undo_result = self._correction_log.undo_last()
+        if not undo_result:
+            QMessageBox.information(self, "Undo", "No changes to undo.")
+            return
+        row, old_cat, new_cat = undo_result
+        current_item = self.table.item(row, 1)
+        if current_item is not None:
+            current_item.setText(old_cat)
+        if getattr(self, "_last_results", None) and row < len(self._last_results):
+            try:
+                self._last_results[row].category = old_cat
+            except Exception:
+                pass
+        if not self._correction_log.changes:
+            self.undo_btn.setEnabled(False)
+        QMessageBox.information(self, "Undo", f"Reverted row {row}: {new_cat} → {old_cat}")
+
+    def _export_corrections(self) -> None:
+        """Export the correction log as CSV."""
+        if not self._correction_log.changes:
+            QMessageBox.information(self, "Corrections", "No category changes to export.")
+            return
+        default_path = (
+            str(self._last_output / "category_corrections.csv") if self._last_output else ""
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export corrections", default_path, "CSV files (*.csv);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            content = self._correction_log.as_csv()
+            Path(path).write_text(content, encoding="utf-8")
+            QMessageBox.information(self, "Export complete", f"Wrote corrections to {path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export failed", str(exc))
+    def _request_document_advice(self) -> None:
+        if not getattr(self, "_last_results", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first to request advice.")
+            return
+        if not getattr(self, "_last_summary", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first to request advice.")
+            return
+        try:
+            host = self.agent_host_edit.text().strip() or "127.0.0.1"
+            port = int(self.agent_port_edit.text().strip() or "8080")
+            options = AgentClientOptions(base_url=f"http://{host}:{port}")
+            row = self.table.currentRow()
+            if row < 0:
+                QMessageBox.warning(self, "Select row", "Select one document row first.")
+                return
+            document = {
+                "file_name": self.table.item(row, 0).text(),
+                "category": self.table.item(row, 1).text(),
+                "vendor": self.table.item(row, 2).text(),
+                "invoice_date": self.table.item(row, 3).text(),
+                "gross": self.table.item(row, 4).text(),
+                "currency": self.table.item(row, 5).text(),
+                "confidence": float(self.table.item(row, 6).text()),
+                "status": self.table.item(row, 7).text(),
+                "notes": self.table.item(row, 8).text(),
+            }
+            advice = request_document_advice(document, options)
+            QMessageBox.information(self, "Document Advice", advice)
+        except Exception as exc:
+            QMessageBox.critical(self, "Agent request failed", str(exc))
+
+    def _request_executive_report(self) -> None:
+        if not getattr(self, "_last_results", None) or not getattr(self, "_last_summary", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first to request an executive report.")
+            return
+        try:
+            host = self.agent_host_edit.text().strip() or "127.0.0.1"
+            port = int(self.agent_port_edit.text().strip() or "8080")
+            options = AgentClientOptions(base_url=f"http://{host}:{port}")
+            summary_payload = {
+                "total_scanned": self._last_summary.total_scanned,
+                "processed": len(self._last_results),
+                "manual_review": sum(1 for r in self._last_results if r.status == ProcessingStatus.MANUAL_REVIEW or r.category == self._last_summary.manual_review_category),
+                "failed": sum(1 for r in self._last_results if r.status == ProcessingStatus.FAILED),
+                "unsupported": len(self._last_summary.unsupported_files),
+                "categories": {r.category: sum(1 for x in self._last_results if x.category == r.category) for r in self._last_results},
+            }
+            # create a modal dialog to display streaming chunks
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Executive Report")
+            layout = QVBoxLayout(dialog)
+            exec_text = QTextEdit(dialog)
+            exec_text.setReadOnly(True)
+            layout.addWidget(exec_text)
+            dialog.setLayout(layout)
+            dialog.show()
+
+            worker = ExecReportWorker(summary_payload, options=options)
+            self._exec_worker = worker
+            worker.chunk_received.connect(lambda s: exec_text.insertPlainText(s))
+            worker.finished.connect(lambda: QMessageBox.information(self, "Exec Report", "Report complete"))
+
+            def _on_error(err: str) -> None:
+                dialog.close()
+                QMessageBox.critical(self, "Exec Report Error", err)
+
+            worker.error.connect(_on_error)
+            worker.start()
+        except Exception as exc:
+            QMessageBox.critical(self, "Agent request failed", str(exc))
 
     def _export_table_csv(self) -> None:
         # Prompt for save location and write current table contents as CSV.
