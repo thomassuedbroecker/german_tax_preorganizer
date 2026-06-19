@@ -104,3 +104,28 @@ def test_run_options_pass_extraction_backend(tmp_path, config, monkeypatch):
     orchestrator.run(options)
 
     assert seen == ["light"]
+
+
+def test_ai_review_failure_is_nonfatal(tmp_path, config, fake_extract, monkeypatch):
+    def fail_review(*_args, **_kwargs):
+        raise RuntimeError("Ollama unavailable")
+
+    monkeypatch.setattr(orchestrator.ai_review_module, "generate_review", fail_review)
+    input_dir = tmp_path / "in"
+    input_dir.mkdir()
+    (input_dir / "telekom.pdf").write_bytes(b"%PDF-1.4 fake")
+
+    options = RunOptions(
+        input_dir=input_dir,
+        output_dir=tmp_path / "out",
+        config=config,
+        dry_run=True,
+        ai_review=True,
+    )
+
+    results, summary = orchestrator.run(options)
+
+    assert len(results) == 1
+    assert "Ollama unavailable" in summary.ai_review_error
+    report = (tmp_path / "out" / "invoice_summary.md").read_text()
+    assert "AI review unavailable" in report

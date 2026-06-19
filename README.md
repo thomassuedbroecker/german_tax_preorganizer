@@ -111,6 +111,9 @@ Options:
 | `--dry-run` | Analyze only; do not copy files |
 | `--recursive` / `--no-recursive` | Scan subfolders (default: on) |
 | `--move` | Move instead of copy (default: copy — safer) |
+| `--ai-review` | Append an optional local Ollama sorting review to `invoice_summary.md` |
+| `--ai-model` | Ollama model for `--ai-review` (default: `OLLAMA_MODEL` or `llama3.2`) |
+| `--ai-base-url` | Ollama URL for `--ai-review` (default: `http://127.0.0.1:11434`) |
 | `--verbose` | Print a per-file line (filenames; avoid when screen-sharing private data) |
 | `--version` | Print version and exit |
 
@@ -124,10 +127,11 @@ invoice-sorter-gui
 ```
 
 Pick input/output folders and a config, toggle **Dry run** (on by default),
-choose a backend (**Auto**, **Docling**, or **Light**), then click **Run**.
-Results appear in a sortable table (manual-review rows highlighted amber,
-failures red, high-confidence green); buttons open the report and output folder.
-The work runs in a background thread so the window stays responsive.
+choose a backend (**Auto**, **Docling**, or **Light**), optionally enable
+**Local AI review**, then click **Run**. Results appear in a sortable table
+(manual-review rows highlighted amber, failures red, high-confidence green);
+buttons open the report and output folder. The work runs in a background thread
+so the window stays responsive.
 
 ## 7. How dry-run works
 
@@ -135,6 +139,29 @@ The work runs in a background thread so the window stays responsive.
 writes the report and audit log so you can review decisions, but it **does not
 create the `Sorted_Invoices/` tree or copy any file.** Re-run without `--dry-run`
 to actually sort.
+
+## 7b. Optional local AI review
+
+`--ai-review` calls a local Ollama server after deterministic sorting finishes
+and appends a **Local AI sorting review** section to `invoice_summary.md`.
+Classification remains rule-based; the AI review does not move files or change
+categories.
+
+```bash
+invoice-sorter \
+  --input "/path/to/input/folder" \
+  --output "/path/to/output/folder" \
+  --backend auto \
+  --dry-run \
+  --ai-review \
+  --ai-model llama3.2
+```
+
+Privacy boundary: the AI review prompt is generated in application code and sends
+aggregate counts, confidence signals, manual-review reasons, and limited
+metadata to local Ollama. It never sends full extracted invoice text. The files
+under `prompts/` are project interaction history only; they are not runtime
+prompts loaded by the app.
 
 ## 8. Configuring categories
 
@@ -205,14 +232,15 @@ with low confidence, or confidence is below the configured threshold.
 ## 11. Future improvements
 
 - Optional **DOCX** export for Apple Pages.
-- Optional local **Ollama** LLM assist for classification (augmenting, not
+- Optional local **Ollama** assist for classification tie-breaks (augmenting, not
   replacing, the rule-based result), following the author's `pdf_extraction_macos`
-  project. The `docling_preprocessor_factory` repo can be wired into
+  project. The current Ollama integration is report review only. The
+  `docling_preprocessor_factory` repo can be wired into
   `extraction_adapter._extract_with_factory` if preferred over plain Docling.
 
 Done already: CLI, Docling backend, hybrid extraction, backend selection,
-**PySide6 desktop GUI**, rule-based classifier, Markdown report, JSONL audit log,
-dry-run, real-data tuning script.
+optional local Ollama report review, **PySide6 desktop GUI**, rule-based
+classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
 
 ## Project structure
 

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections import Counter
 from pathlib import Path
 
 from . import __version__
+from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
 from .config import ConfigError, load_config
 from .extraction_adapter import EXTRACTION_BACKENDS, active_backend
 from .orchestrator import RunOptions, run
@@ -39,6 +41,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--move", action="store_true",
         help="Move files instead of copying (default: copy; copy is safer)",
+    )
+    parser.add_argument(
+        "--ai-review",
+        action="store_true",
+        help="Append an optional local Ollama review to the Markdown report",
+    )
+    parser.add_argument(
+        "--ai-model",
+        default=os.environ.get("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
+        help="Ollama model for --ai-review (default: OLLAMA_MODEL or llama3.2)",
+    )
+    parser.add_argument(
+        "--ai-base-url",
+        default=os.environ.get("OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL),
+        help="Ollama base URL for --ai-review (default: http://127.0.0.1:11434)",
     )
     parser.add_argument("--verbose", action="store_true", help="Print more details")
     parser.add_argument("--version", action="version", version=f"invoice-sorter {__version__}")
@@ -112,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
         recursive=args.recursive,
         move=args.move,
         extraction_backend=args.backend,
+        ai_review=args.ai_review,
+        ai_model=args.ai_model,
+        ai_base_url=args.ai_base_url,
     )
 
     results, summary = run(options)

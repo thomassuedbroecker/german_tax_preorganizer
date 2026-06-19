@@ -62,6 +62,22 @@ def test_dry_run_banner():
     assert "DRY RUN" in md
 
 
+def test_report_includes_ai_review_when_present():
+    summary = RunSummary(total_scanned=1, ai_review="## Overall result\nLooks usable.")
+    md = build_report(_sample_results()[:1], summary)
+
+    assert "## 2b. Local AI sorting review" in md
+    assert "Looks usable." in md
+
+
+def test_report_includes_ai_review_error_when_present():
+    summary = RunSummary(total_scanned=1, ai_review_error="RuntimeError: unavailable")
+    md = build_report(_sample_results()[:1], summary)
+
+    assert "## 2b. Local AI sorting review" in md
+    assert "AI review unavailable" in md
+
+
 def test_write_report(tmp_path):
     from invoice_sorter.report import write_report
 

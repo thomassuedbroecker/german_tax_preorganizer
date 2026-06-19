@@ -26,8 +26,8 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **38 pytest passing** after Codex regression tests for hybrid metadata,
-  local-config helper classification, and backend selection.
+- ✅ **43 pytest passing** after Codex regression tests for hybrid metadata,
+  local-config helper classification, backend selection, and local AI review.
 - ✅ Hybrid manual-review verification completed on the 38 local PDFs with output
   outside the repo at `/private/tmp/german_tax_preorganizer_hybrid_out`.
   Final aggregate result: **38 processed, 0 unsupported, 16 manual-review, 22
@@ -66,6 +66,14 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   selection changes.
 - Added `docs/QUICK_START.md` with first-run setup, dry-run, GUI, local config,
   offline Docling, and test commands. README now links to it near the top.
+- Added optional local Ollama AI review integration. It runs after deterministic
+  sorting, appends a local AI sorting review to `invoice_summary.md`, and does
+  not affect classification or routing. Runtime prompt is code-owned in
+  `src/invoice_sorter/ai_review.py`; `prompts/` remains interaction history only.
+- Added CLI flags `--ai-review`, `--ai-model`, and `--ai-base-url`; GUI has a
+  Local AI review checkbox plus Ollama model/URL fields.
+- Verified `.venv/bin/python -m pytest -q` -> **43 passed** after AI review
+  changes.
 
 ## ⚠️ Privacy rules — do not break
 
@@ -126,7 +134,8 @@ backend).
 2. ✅ Done: GUI backend selector (Auto / Docling / Light) in `gui.py`, backed by
    `RunOptions.extraction_backend`. CLI also has `--backend`.
 3. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
-4. **Ollama assist** (optional, local) as a tie-breaker for manual-review files.
+4. Partly done: optional local Ollama report review is implemented. Still open:
+   optional Ollama assist as a tie-breaker for manual-review files.
 5. Help the user finish `categories.local.yaml` for their real vendors.
 6. ✅ Done: `scripts/suggest_local_config.py` now uses `classify_text()` for
    classification in both analysis and reroute-count passes.
@@ -137,16 +146,14 @@ Nothing from this continuation has been committed. Current changed files:
 
 - Modified: `docs/HANDOFF.md`
 - Modified: `README.md`
-- Modified: `scripts/suggest_local_config.py`
 - Modified: `src/invoice_sorter/cli.py`
-- Modified: `src/invoice_sorter/extraction_adapter.py`
 - Modified: `src/invoice_sorter/gui.py`
-- Modified: `src/invoice_sorter/metadata_extraction.py`
 - Modified: `src/invoice_sorter/orchestrator.py`
+- Modified: `src/invoice_sorter/report.py`
 - Modified: `tests/test_cli_dry_run.py`
-- Modified: `tests/test_metadata_extraction.py`
-- Untracked: `docs/QUICK_START.md`
-- Untracked: `tests/test_extraction_adapter.py`
-- Untracked: `tests/test_suggest_local_config.py`
+- Modified: `tests/test_report.py`
+- Modified: `docs/QUICK_START.md`
+- Untracked: `src/invoice_sorter/ai_review.py`
+- Untracked: `tests/test_ai_review.py`
 
 Repo is on `main` with one initial commit. Branch before committing.

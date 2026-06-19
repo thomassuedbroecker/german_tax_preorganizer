@@ -30,6 +30,8 @@ class RunSummary:
     unsupported_files: list[Path] = field(default_factory=list)
     dry_run: bool = False
     manual_review_category: str = "Unklar / Manuell prüfen"
+    ai_review: str | None = None
+    ai_review_error: str | None = None
 
     def __post_init__(self) -> None:
         self.generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -90,6 +92,16 @@ def build_report(
     for category in sorted(by_category):
         a(f"| {category} | {by_category[category]} |")
     a("")
+
+    # Optional local AI review
+    if summary.ai_review or summary.ai_review_error:
+        a("## 2b. Local AI sorting review")
+        a("")
+        if summary.ai_review:
+            a(summary.ai_review.strip())
+        else:
+            a(f"_AI review unavailable: {summary.ai_review_error}_")
+        a("")
 
     # 8. Full invoice table
     a("## 3. Full invoice table")

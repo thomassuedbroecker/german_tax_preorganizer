@@ -116,7 +116,26 @@ invoice-sorter \
   --dry-run
 ```
 
-## 7. Offline Docling Run
+## 7. Add a Local AI Review
+
+If Ollama is running locally, add an AI-generated sorting review to the Markdown
+report:
+
+```bash
+invoice-sorter \
+  --input "/path/to/invoices" \
+  --output "/private/tmp/invoice-sorter-out" \
+  --backend auto \
+  --dry-run \
+  --ai-review \
+  --ai-model llama3.2
+```
+
+The AI review runs after sorting. It does not change categories, copy files, or
+replace the rule-based classifier. It receives aggregate counts and extracted
+metadata only, never full invoice text.
+
+## 8. Offline Docling Run
 
 After Docling models are warmed up, enforce offline mode:
 
@@ -130,7 +149,7 @@ invoice-sorter \
   --dry-run
 ```
 
-## 8. Verify the Project
+## 9. Verify the Project
 
 ```bash
 .venv/bin/python -m pytest -q

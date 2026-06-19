@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import ai_review as ai_review_module
 from . import audit_log, file_operations, report
 from .classifier import classify
 from .config import Config
@@ -28,6 +29,9 @@ class RunOptions:
     recursive: bool = True
     move: bool = False
     extraction_backend: str = "auto"
+    ai_review: bool = False
+    ai_model: str = ai_review_module.DEFAULT_OLLAMA_MODEL
+    ai_base_url: str = ai_review_module.DEFAULT_OLLAMA_URL
 
 
 def process_file(source: Path, options: RunOptions) -> DocumentResult:
@@ -95,6 +99,20 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
         dry_run=options.dry_run,
         manual_review_category=options.config.manual_review_category,
     )
+
+    if options.ai_review:
+        try:
+            summary.ai_review = ai_review_module.generate_review(
+                results,
+                summary,
+                ai_review_module.AiReviewOptions(
+                    enabled=True,
+                    model=options.ai_model,
+                    base_url=options.ai_base_url,
+                ),
+            )
+        except Exception as exc:
+            summary.ai_review_error = f"{type(exc).__name__}: {exc}"
 
     # Outputs (report + audit log) are always written, even on dry-run, so the
     # user can preview decisions. They live under the output folder.

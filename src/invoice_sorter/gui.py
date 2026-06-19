@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
 from .config import ConfigError, load_config
 from .extraction_adapter import active_backend
 from .models import UNKNOWN, ProcessingStatus
@@ -100,6 +101,12 @@ class MainWindow(QMainWindow):
         form.addWidget(QLabel("Config (categories.yaml)"), 2, 0)
         form.addWidget(self.config_edit, 2, 1)
         form.addWidget(self._browse_btn(self.config_edit, folder=False), 2, 2)
+        self.ai_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
+        self.ai_url_edit = QLineEdit(DEFAULT_OLLAMA_URL)
+        form.addWidget(QLabel("Ollama model"), 3, 0)
+        form.addWidget(self.ai_model_edit, 3, 1)
+        form.addWidget(QLabel("Ollama URL"), 4, 0)
+        form.addWidget(self.ai_url_edit, 4, 1)
         root.addLayout(form)
 
         # --- options ----------------------------------------------------
@@ -109,6 +116,7 @@ class MainWindow(QMainWindow):
         self.recursive = QCheckBox("Recursive")
         self.recursive.setChecked(True)
         self.move = QCheckBox("Move instead of copy")
+        self.ai_review = QCheckBox("Local AI review")
         self.backend_combo = QComboBox()
         self.backend_combo.addItem(f"Auto ({active_backend()})", "auto")
         self.backend_combo.addItem("Docling", "docling")
@@ -116,6 +124,7 @@ class MainWindow(QMainWindow):
         opts.addWidget(self.dry_run)
         opts.addWidget(self.recursive)
         opts.addWidget(self.move)
+        opts.addWidget(self.ai_review)
         opts.addStretch(1)
         opts.addWidget(QLabel("Backend"))
         opts.addWidget(self.backend_combo)
@@ -200,6 +209,9 @@ class MainWindow(QMainWindow):
             recursive=self.recursive.isChecked(),
             move=self.move.isChecked(),
             extraction_backend=self.backend_combo.currentData(),
+            ai_review=self.ai_review.isChecked(),
+            ai_model=self.ai_model_edit.text().strip() or DEFAULT_OLLAMA_MODEL,
+            ai_base_url=self.ai_url_edit.text().strip() or DEFAULT_OLLAMA_URL,
         )
         self._last_output = output_dir
 
