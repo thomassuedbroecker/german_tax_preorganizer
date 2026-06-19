@@ -128,6 +128,8 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   background with white text; high-confidence rows (>= 0.90) use a light
   green background.
  - ✅ GUI: added `Export CSV` button to save the table view to a CSV file.
+ - ✅ GUI: added `Export CSV` button to save the table view to a CSV file.
+ - ✅ GUI: added `Generate Exec PDF` (AI-assisted) to produce an executive PDF report. It uses the local AI review text (when enabled) and the standard Markdown report rendered into a PDF.
 - Starting customizable local AI inspection prompts: add a runtime template under
   `config/`, CLI/GUI prompt-file selection, and keep `prompts/` reserved for
   interaction history.

@@ -15,7 +15,8 @@ from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices, QTextDocument
+from PySide6.QtPrintSupport import QPrinter
 import csv
 from PySide6.QtWidgets import (
     QApplication,
@@ -176,10 +177,14 @@ class MainWindow(QMainWindow):
         self.export_csv_btn = QPushButton("Export CSV")
         self.export_csv_btn.clicked.connect(self._export_table_csv)
         self.export_csv_btn.setEnabled(False)
+        self.exec_pdf_btn = QPushButton("Generate Exec PDF")
+        self.exec_pdf_btn.clicked.connect(self._generate_exec_pdf)
+        self.exec_pdf_btn.setEnabled(False)
         run_row.addWidget(self.run_btn)
         run_row.addWidget(self.stop_btn)
         run_row.addWidget(self.open_report_btn)
         run_row.addWidget(self.export_csv_btn)
+        run_row.addWidget(self.exec_pdf_btn)
         run_row.addWidget(self.open_folder_btn)
         run_row.addStretch(1)
         self.progress = QProgressBar()
@@ -306,6 +311,11 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self.open_report_btn.setEnabled(True)
         self.open_folder_btn.setEnabled(True)
+        self.export_csv_btn.setEnabled(True)
+        self.exec_pdf_btn.setEnabled(True)
+        # Save for later export actions
+        self._last_results = results
+        self._last_summary = summary
 
         manual = sum(1 for r in results
                      if r.status == ProcessingStatus.MANUAL_REVIEW
@@ -349,6 +359,33 @@ class MainWindow(QMainWindow):
                     item.setBackground(QColor(224, 245, 224))
                 self.table.setItem(row, col, item)
         self.table.setSortingEnabled(True)
+
+    def _generate_exec_pdf(self) -> None:
+        if not getattr(self, "_last_results", None) or not getattr(self, "_last_summary", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first to generate a report.")
+            return
+        default_path = str(self._last_output / "invoice_summary_exec.pdf") if self._last_output else ""
+        path, _ = QFileDialog.getSaveFileName(self, "Save executive PDF", default_path, "PDF files (*.pdf);;All files (*)")
+        if not path:
+            return
+        try:
+            from .report import build_report
+
+            md = build_report(self._last_results, self._last_summary)
+            # Simple rendering: wrap markdown in <pre> to keep formatting.
+            html = (
+                '<html><head><meta charset="utf-8"><style>body{font-family: "Helvetica", "Arial", sans-serif; padding:20px;} pre{white-space:pre-wrap; font-family: "Helvetica", "Arial", sans-serif;}</style></head><body>'
+                f"<h1>Executive Invoice Summary</h1><pre>{md}</pre></body></html>"
+            )
+            doc = QTextDocument()
+            doc.setHtml(html)
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            doc.print(printer)
+            QMessageBox.information(self, "PDF saved", f"Executive PDF written to {path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "PDF generation failed", str(exc))
 
     def _open_report(self) -> None:
         if self._last_output:
