@@ -13,6 +13,7 @@ from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
 from .config import ConfigError, load_config
 from .extraction_adapter import EXTRACTION_BACKENDS, active_backend
 from .orchestrator import RunOptions, run
+from .performance_log import PERFORMANCE_LOG_NAME
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "categories.yaml"
 
@@ -81,6 +82,9 @@ def _print_summary(results, summary, options, verbose: bool) -> None:
         table.add_row("Total scanned", str(summary.total_scanned))
         table.add_row("Processed", str(len(results)))
         table.add_row("Unsupported (ignored)", str(len(summary.unsupported_files)))
+        table.add_row("Extraction time", f"{summary.extraction_time_seconds:.3f}s")
+        if summary.cancelled:
+            table.add_row("Run status", "CANCELLED (partial results)")
         console.print(table)
 
         cat_table = Table(title="By category")
@@ -140,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     report_path = output_dir / "invoice_summary.md"
     print(f"\nReport:    {report_path}")
     print(f"Audit log: {output_dir / 'audit_log.jsonl'}")
+    print(f"Performance: {output_dir / PERFORMANCE_LOG_NAME}")
     if summary.dry_run:
         print("Dry run — no files were copied.")
     return 0

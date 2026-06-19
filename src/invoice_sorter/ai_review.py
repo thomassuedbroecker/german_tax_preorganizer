@@ -31,6 +31,12 @@ class AiReviewOptions:
     timeout_seconds: float = 60.0
 
 
+@dataclass
+class AiReviewResult:
+    text: str
+    metrics: dict[str, Any]
+
+
 def _fmt(value: Any) -> str:
     if value is None:
         return UNKNOWN
@@ -134,8 +140,8 @@ def generate_review(
     results: list[DocumentResult],
     summary: RunSummary,
     options: AiReviewOptions,
-) -> str:
-    """Return Markdown review text from local Ollama.
+) -> AiReviewResult:
+    """Return Markdown review text and inference metrics from local Ollama.
 
     Raises ``RuntimeError`` with a short message if Ollama is unavailable or
     returns an invalid response. The caller decides whether that is fatal.
@@ -171,4 +177,20 @@ def generate_review(
     text = str(data.get("response") or "").strip()
     if not text:
         raise RuntimeError("Ollama returned an empty response")
-    return text
+
+    def seconds(field: str) -> float:
+        return round(float(data.get(field) or 0) / 1_000_000_000, 6)
+
+    prompt_tokens = int(data.get("prompt_eval_count") or 0)
+    output_tokens = int(data.get("eval_count") or 0)
+    metrics = {
+        "model": str(data.get("model") or options.model),
+        "total_duration_seconds": seconds("total_duration"),
+        "load_duration_seconds": seconds("load_duration"),
+        "prompt_eval_duration_seconds": seconds("prompt_eval_duration"),
+        "inference_duration_seconds": seconds("eval_duration"),
+        "prompt_tokens": prompt_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": prompt_tokens + output_tokens,
+    }
+    return AiReviewResult(text=text, metrics=metrics)

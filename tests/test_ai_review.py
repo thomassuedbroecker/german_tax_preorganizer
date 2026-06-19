@@ -46,7 +46,12 @@ def test_generate_review_parses_ollama_response(monkeypatch):
             return False
 
         def read(self):
-            return b'{"response":"## Overall result\\nLooks consistent."}'
+            return (
+                b'{"model":"llama3.2","response":"## Overall result\\nLooks consistent.",'
+                b'"total_duration":2500000000,"load_duration":500000000,'
+                b'"prompt_eval_count":120,"prompt_eval_duration":600000000,'
+                b'"eval_count":40,"eval_duration":1400000000}'
+            )
 
     def fake_urlopen(request, timeout):
         assert timeout == 3
@@ -55,10 +60,14 @@ def test_generate_review_parses_ollama_response(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
-    review = generate_review(
+    result = generate_review(
         [_result()],
         RunSummary(total_scanned=1),
         AiReviewOptions(enabled=True, timeout_seconds=3),
     )
 
-    assert "Looks consistent." in review
+    assert "Looks consistent." in result.text
+    assert result.metrics["inference_duration_seconds"] == 1.4
+    assert result.metrics["prompt_tokens"] == 120
+    assert result.metrics["output_tokens"] == 40
+    assert result.metrics["total_tokens"] == 160

@@ -226,6 +226,7 @@ __marimo__/
 Sorted_Invoices/
 invoice_summary.md
 audit_log.jsonl
+performance_log.json
 invoice_summary.docx
 # (the sanitized examples/sample_invoice_summary.md is intentionally tracked)
 

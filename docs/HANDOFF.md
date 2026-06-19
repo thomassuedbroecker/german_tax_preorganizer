@@ -26,8 +26,9 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **43 pytest passing** after Codex regression tests for hybrid metadata,
-  local-config helper classification, backend selection, and local AI review.
+- ✅ **47 pytest passing** after Codex regression tests for hybrid metadata,
+  local-config helper classification, backend selection, local AI review,
+  performance telemetry, GUI progress, and cancellation controls.
 - ✅ Hybrid manual-review verification completed on the 38 local PDFs with output
   outside the repo at `/private/tmp/german_tax_preorganizer_hybrid_out`.
   Final aggregate result: **38 processed, 0 unsupported, 16 manual-review, 22
@@ -98,6 +99,30 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   routed it to manual review; offscreen PySide6 run processed the same file,
   populated 1 table row, showed the expected summary, and enabled report/output
   controls.
+- GUI launch troubleshooting: the installed executable is
+  `.venv/bin/invoice-sorter-gui`; it was launched successfully with macOS GUI
+  access. Quick Start and README now use the explicit virtual-environment path
+  and document activation plus `python -m invoice_sorter.gui` fallbacks.
+- Clarified GUI startup docs: activating `.venv` is the recommended flow because
+  it contains PySide6 and the installed entry point. Direct `.venv/bin/...`
+  execution remains the equivalent non-activation fallback.
+- Starting performance telemetry: add per-document extraction timing and preserve
+  Ollama inference durations plus prompt/output token counts in an anonymized
+  `performance_log.json` and report summary.
+- UI progress was added to the active scope: expose an orchestrator progress
+  callback and show inspected/total document counts in the PySide6 progress bar.
+- Cooperative UI cancellation was added to the active scope: Stop requests
+  cancellation, finishes the current document safely, then writes partial
+  report/audit/performance outputs.
+- Performance/progress/cancellation work completed. Each document records
+  extraction and total processing seconds; `performance_log.json` uses anonymous
+  document IDs and includes extraction aggregates. Ollama metrics preserve model,
+  total/load/prompt-evaluation/inference durations and prompt/output/total tokens.
+- UI now shows inspected/total document progress and has a Stop button. Stop is
+  cooperative (after the current document), marks the report cancelled, and
+  writes partial report/audit/performance outputs. Final pytest -> **47 passed**.
+- Manual-review/unidentified GUI rows now use a dark red background with white
+  text instead of yellow/black; failed rows remain light red.
 
 ## ⚠️ Privacy rules — do not break
 
@@ -168,13 +193,20 @@ backend).
 
 Nothing from this continuation has been committed. Current changed files:
 
+- Modified: `.gitignore`
 - Modified: `README.md`
 - Modified: `docs/HANDOFF.md`
-- Modified: `pyproject.toml`
-- Untracked: `.github/workflows/tests.yml`
-- Untracked: `CONTENT_PROVENANCE.md`
-- Untracked: `LICENSE_POLICY.md`
-- Untracked: `THIRD_PARTY_NOTICES.md`
-- Untracked: `scripts/check_license_metadata.py`
+- Modified: `docs/QUICK_START.md`
+- Modified: `src/invoice_sorter/ai_review.py`
+- Modified: `src/invoice_sorter/cli.py`
+- Modified: `src/invoice_sorter/gui.py`
+- Modified: `src/invoice_sorter/models.py`
+- Modified: `src/invoice_sorter/orchestrator.py`
+- Modified: `src/invoice_sorter/report.py`
+- Modified: `tests/test_ai_review.py`
+- Modified: `tests/test_cli_dry_run.py`
+- Modified: `tests/test_report.py`
+- Untracked: `src/invoice_sorter/performance_log.py`
+- Untracked: `tests/test_gui_controls.py`
 
 Repo is on `main` with one initial commit. Branch before committing.

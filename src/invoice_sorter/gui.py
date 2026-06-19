@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 from decimal import Decimal
 from pathlib import Path
+from threading import Event
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices
@@ -61,10 +62,17 @@ class Worker(QObject):
 
     finished = Signal(object, object)  # (results, summary)
     failed = Signal(str)
+    progress = Signal(int, int)  # (completed, total)
 
     def __init__(self, options: RunOptions) -> None:
         super().__init__()
         self.options = options
+        self._cancel_requested = Event()
+        self.options.progress_callback = self.progress.emit
+        self.options.cancel_check = self._cancel_requested.is_set
+
+    def cancel(self) -> None:
+        self._cancel_requested.set()
 
     def run(self) -> None:
         try:
@@ -134,6 +142,9 @@ class MainWindow(QMainWindow):
         run_row = QHBoxLayout()
         self.run_btn = QPushButton("Run")
         self.run_btn.clicked.connect(self._on_run)
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.clicked.connect(self._on_stop)
+        self.stop_btn.setEnabled(False)
         self.open_report_btn = QPushButton("Open report")
         self.open_report_btn.clicked.connect(self._open_report)
         self.open_report_btn.setEnabled(False)
@@ -141,11 +152,13 @@ class MainWindow(QMainWindow):
         self.open_folder_btn.clicked.connect(self._open_folder)
         self.open_folder_btn.setEnabled(False)
         run_row.addWidget(self.run_btn)
+        run_row.addWidget(self.stop_btn)
         run_row.addWidget(self.open_report_btn)
         run_row.addWidget(self.open_folder_btn)
         run_row.addStretch(1)
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)  # indeterminate
+        self.progress.setMinimumWidth(180)
         self.progress.hide()
         run_row.addWidget(self.progress)
         root.addLayout(run_row)
@@ -182,7 +195,24 @@ class MainWindow(QMainWindow):
 
     def _set_busy(self, busy: bool) -> None:
         self.run_btn.setEnabled(not busy)
+        self.stop_btn.setEnabled(busy)
+        if busy:
+            self.progress.setRange(0, 0)
+            self.progress.setFormat("Preparing documents…")
         self.progress.setVisible(busy)
+
+    def _on_progress(self, completed: int, total: int) -> None:
+        maximum = max(total, 1)
+        self.progress.setRange(0, maximum)
+        self.progress.setValue(completed if total else maximum)
+        self.progress.setFormat(f"{completed} / {total} documents")
+
+    def _on_stop(self) -> None:
+        if self._worker is None:
+            return
+        self._worker.cancel()
+        self.stop_btn.setEnabled(False)
+        self.summary_label.setText("Stopping after the current document…")
 
     # --- actions --------------------------------------------------------
     def _on_run(self) -> None:
@@ -224,6 +254,7 @@ class MainWindow(QMainWindow):
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
+        self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._thread.quit)
         self._worker.failed.connect(self._thread.quit)
         self._thread.start()
@@ -243,6 +274,8 @@ class MainWindow(QMainWindow):
                      or r.category == summary.manual_review_category)
         failed = sum(1 for r in results if r.status == ProcessingStatus.FAILED)
         mode = "DRY RUN" if summary.dry_run else ("MOVE" if self.move.isChecked() else "COPY")
+        if summary.cancelled:
+            mode = f"CANCELLED {mode}"
         self.summary_label.setText(
             f"<b>{mode}</b> · scanned {summary.total_scanned} · processed "
             f"{len(results)} · sorted {len(results) - manual - failed} · "
@@ -267,7 +300,8 @@ class MainWindow(QMainWindow):
                 if is_failed:
                     item.setBackground(QColor(255, 224, 224))
                 elif is_manual:
-                    item.setBackground(QColor(255, 246, 214))
+                    item.setBackground(QColor(185, 28, 28))
+                    item.setForeground(QColor(255, 255, 255))
                 elif col == 6 and r.confidence >= 0.9:
                     item.setBackground(QColor(224, 245, 224))
                 self.table.setItem(row, col, item)

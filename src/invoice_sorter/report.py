@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from .models import UNKNOWN, DocumentResult, ProcessingStatus
 
@@ -30,8 +31,12 @@ class RunSummary:
     unsupported_files: list[Path] = field(default_factory=list)
     dry_run: bool = False
     manual_review_category: str = "Unklar / Manuell prüfen"
+    cancelled: bool = False
     ai_review: str | None = None
     ai_review_error: str | None = None
+    ai_review_metrics: dict[str, Any] | None = None
+    extraction_time_seconds: float = 0.0
+    processing_time_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         self.generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -82,6 +87,10 @@ def build_report(
     a(f"- Unclear documents (manual review): **{len(manual)}**")
     a(f"- Failed files: **{len(failed)}**")
     a(f"- Unsupported files (ignored): **{len(summary.unsupported_files)}**")
+    a(f"- Total extraction time: **{summary.extraction_time_seconds:.3f} seconds**")
+    a(f"- Processing time before report output: **{summary.processing_time_seconds:.3f} seconds**")
+    if summary.cancelled:
+        a("- Run status: **CANCELLED — partial results only**")
     a("")
 
     # 7. Category summary
@@ -99,6 +108,16 @@ def build_report(
         a("")
         if summary.ai_review:
             a(summary.ai_review.strip())
+            metrics = summary.ai_review_metrics or {}
+            if metrics:
+                a("")
+                a(
+                    "_Ollama metrics: "
+                    f"inference {metrics.get('inference_duration_seconds', 0):.3f}s; "
+                    f"prompt {metrics.get('prompt_tokens', 0)} tokens; "
+                    f"output {metrics.get('output_tokens', 0)} tokens; "
+                    f"total {metrics.get('total_tokens', 0)} tokens._"
+                )
         else:
             a(f"_AI review unavailable: {summary.ai_review_error}_")
         a("")

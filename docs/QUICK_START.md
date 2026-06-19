@@ -15,7 +15,7 @@ pip install -e ".[light,test]"
 For the desktop app:
 
 ```bash
-pip install -e ".[gui]"
+.venv/bin/pip install -e ".[gui]"
 ```
 
 For Docling-quality amount/table extraction:
@@ -53,6 +53,7 @@ Dry run writes:
 
 - `/private/tmp/invoice-sorter-out/invoice_summary.md`
 - `/private/tmp/invoice-sorter-out/audit_log.jsonl`
+- `/private/tmp/invoice-sorter-out/performance_log.json`
 
 It does not copy or move invoice files.
 
@@ -79,9 +80,31 @@ only if you intentionally want to move originals.
 
 ## 5. Use the GUI
 
+Recommended: activate the project virtual environment, then launch the GUI:
+
 ```bash
+source .venv/bin/activate
 invoice-sorter-gui
 ```
+
+The virtual environment is required because it contains PySide6 and the installed
+application. It is not a background service; activation only selects its Python
+and commands for the current shell.
+
+Without activating it, run the executable explicitly from the same environment:
+
+```bash
+.venv/bin/invoice-sorter-gui
+```
+
+Module fallback:
+
+```bash
+.venv/bin/python -m invoice_sorter.gui
+```
+
+If the shell reports `command not found`, activate `.venv` or use the explicit
+`.venv/bin/invoice-sorter-gui` command above.
 
 In the app:
 
@@ -90,6 +113,10 @@ In the app:
 3. Leave Dry run enabled for the first pass.
 4. Choose backend: Auto, Docling, or Light.
 5. Click Run.
+
+The progress bar shows how many documents have been inspected. Click **Stop** to
+cancel after the current document; partial report, audit, and performance logs
+are still written.
 
 ## 6. Improve Local Categories
 
@@ -134,6 +161,10 @@ invoice-sorter \
 The AI review runs after sorting. It does not change categories, copy files, or
 replace the rule-based classifier. It receives aggregate counts and extracted
 metadata only, never full invoice text.
+
+Ollama inference duration and prompt/output token counts are shown in the report
+and stored in `performance_log.json`. The same log includes anonymized
+per-document extraction and processing times.
 
 ## 8. Offline Docling Run
 

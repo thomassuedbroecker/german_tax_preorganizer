@@ -99,6 +99,8 @@ class DocumentResult:
     status: ProcessingStatus = ProcessingStatus.PENDING
     extraction_status: ExtractionStatus = ExtractionStatus.NO_TEXT
     backend: str = "none"
+    extraction_time_seconds: float = 0.0
+    processing_time_seconds: float = 0.0
     target_path: Optional[Path] = None
     notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)

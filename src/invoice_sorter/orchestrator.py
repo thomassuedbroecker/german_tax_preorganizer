@@ -6,11 +6,13 @@ result and it is routed to manual review / the error section.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from time import perf_counter
+from typing import Callable
 
 from . import ai_review as ai_review_module
-from . import audit_log, file_operations, report
+from . import audit_log, file_operations, performance_log, report
 from .classifier import classify
 from .config import Config
 from .extraction_adapter import extract_document
@@ -32,14 +34,25 @@ class RunOptions:
     ai_review: bool = False
     ai_model: str = ai_review_module.DEFAULT_OLLAMA_MODEL
     ai_base_url: str = ai_review_module.DEFAULT_OLLAMA_URL
+    progress_callback: Callable[[int, int], None] | None = field(
+        default=None, repr=False
+    )
+    cancel_check: Callable[[], bool] | None = field(default=None, repr=False)
 
 
 def process_file(source: Path, options: RunOptions) -> DocumentResult:
     """Run the full per-file pipeline. Always returns a result (never raises)."""
     result = DocumentResult(source_path=source)
     config = options.config
+    processing_started = perf_counter()
     try:
-        extraction = extract_document(source, backend=options.extraction_backend)
+        extraction_started = perf_counter()
+        try:
+            extraction = extract_document(source, backend=options.extraction_backend)
+        finally:
+            result.extraction_time_seconds = round(
+                perf_counter() - extraction_started, 6
+            )
         class_text = extraction.classify_text()
         # Hold the plain text for routing/length checks; amounts use rich text.
         result.text = class_text
@@ -80,29 +93,48 @@ def process_file(source: Path, options: RunOptions) -> DocumentResult:
         result.add_error(f"{type(exc).__name__}: {exc}")
         if result.extraction_status == ExtractionStatus.NO_TEXT:
             result.extraction_status = ExtractionStatus.ERROR
+    finally:
+        result.processing_time_seconds = round(perf_counter() - processing_started, 6)
 
     return result
 
 
 def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
     """Scan, process, and write outputs. Returns results + summary."""
+    run_started = perf_counter()
     scan = scan_folder(options.input_dir, recursive=options.recursive)
 
     if not options.dry_run:
         file_operations.ensure_category_dirs(options.output_dir, options.config, dry_run=False)
 
-    results = [process_file(path, options) for path in scan.supported]
+    total_documents = len(scan.supported)
+    if options.progress_callback:
+        options.progress_callback(0, total_documents)
+
+    results: list[DocumentResult] = []
+    cancelled = False
+    for index, path in enumerate(scan.supported, start=1):
+        if options.cancel_check and options.cancel_check():
+            cancelled = True
+            break
+        results.append(process_file(path, options))
+        if options.progress_callback:
+            options.progress_callback(index, total_documents)
+        if options.cancel_check and options.cancel_check():
+            cancelled = True
+            break
 
     summary = report.RunSummary(
         total_scanned=len(scan.supported) + len(scan.unsupported),
         unsupported_files=scan.unsupported,
         dry_run=options.dry_run,
         manual_review_category=options.config.manual_review_category,
+        cancelled=cancelled,
     )
 
     if options.ai_review:
         try:
-            summary.ai_review = ai_review_module.generate_review(
+            ai_result = ai_review_module.generate_review(
                 results,
                 summary,
                 ai_review_module.AiReviewOptions(
@@ -111,8 +143,15 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
                     base_url=options.ai_base_url,
                 ),
             )
+            summary.ai_review = ai_result.text
+            summary.ai_review_metrics = ai_result.metrics
         except Exception as exc:
             summary.ai_review_error = f"{type(exc).__name__}: {exc}"
+
+    summary.extraction_time_seconds = round(
+        sum(result.extraction_time_seconds for result in results), 6
+    )
+    summary.processing_time_seconds = round(perf_counter() - run_started, 6)
 
     # Outputs (report + audit log) are always written, even on dry-run, so the
     # user can preview decisions. They live under the output folder.
@@ -120,5 +159,6 @@ def run(options: RunOptions) -> tuple[list[DocumentResult], report.RunSummary]:
     audit_log.write_audit_log(
         Path(options.output_dir) / audit_log.AUDIT_LOG_NAME, results
     )
+    performance_log.write_performance_log(options.output_dir, results, summary)
 
     return results, summary

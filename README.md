@@ -27,7 +27,8 @@ For the shortest setup and first dry run, see
 4. Classifies each file with a transparent rule-based scorer and a confidence
    score.
 5. Copies files into `Sorted_Invoices/<Category>/` (copy, never move, by default).
-6. Writes `invoice_summary.md` and `audit_log.jsonl`.
+6. Writes `invoice_summary.md`, `audit_log.jsonl`, and an anonymized
+   `performance_log.json`.
 
 ## 2. Privacy model
 
@@ -129,16 +130,24 @@ Options:
 A local PySide6 desktop app wraps the same engine:
 
 ```bash
+source .venv/bin/activate
 pip install -e ".[gui]"
 invoice-sorter-gui
 ```
 
+The virtual environment contains PySide6 and the installed application. Without
+activating it, use `.venv/bin/invoice-sorter-gui`. You can also run
+`.venv/bin/python -m invoice_sorter.gui` as a module fallback.
+
 Pick input/output folders and a config, toggle **Dry run** (on by default),
 choose a backend (**Auto**, **Docling**, or **Light**), optionally enable
 **Local AI review**, then click **Run**. Results appear in a sortable table
-(manual-review rows highlighted amber, failures red, high-confidence green);
+(manual-review rows shown dark red with white text, failures light red,
+high-confidence values green);
 buttons open the report and output folder. The work runs in a background thread
-so the window stays responsive.
+so the window stays responsive. A progress bar shows inspected/total documents.
+**Stop** requests cooperative cancellation: the current document finishes, then
+partial report, audit, and performance outputs are written.
 
 ## 7. How dry-run works
 
@@ -169,6 +178,12 @@ aggregate counts, confidence signals, manual-review reasons, and limited
 metadata to local Ollama. It never sends full extracted invoice text. The files
 under `prompts/` are project interaction history only; they are not runtime
 prompts loaded by the app.
+
+`performance_log.json` records per-document extraction/processing time under
+anonymous IDs (`doc_001`, etc.). When Ollama is enabled, it also records model,
+total/load/prompt-evaluation/inference durations, and prompt/output/total token
+counts returned by Ollama. The Markdown report includes total extraction time and
+a compact Ollama inference/token summary.
 
 ## 8. Configuring categories
 
@@ -281,6 +296,7 @@ german_tax_preorganizer/
     routing.py                   # confident category vs. manual review
     file_operations.py           # safe copy, collision-resolving names
     audit_log.py                 # JSONL writer
+    performance_log.py           # anonymized extraction/Ollama timing + tokens
     report.py                    # Markdown report (RunSummary + build_report)
     config.py / constants.py / models.py
   tests/                         # pytest (43 tests)

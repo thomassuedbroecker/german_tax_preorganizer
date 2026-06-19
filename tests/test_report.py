@@ -63,11 +63,22 @@ def test_dry_run_banner():
 
 
 def test_report_includes_ai_review_when_present():
-    summary = RunSummary(total_scanned=1, ai_review="## Overall result\nLooks usable.")
+    summary = RunSummary(
+        total_scanned=1,
+        ai_review="## Overall result\nLooks usable.",
+        ai_review_metrics={
+            "inference_duration_seconds": 1.25,
+            "prompt_tokens": 100,
+            "output_tokens": 25,
+            "total_tokens": 125,
+        },
+    )
     md = build_report(_sample_results()[:1], summary)
 
     assert "## 2b. Local AI sorting review" in md
     assert "Looks usable." in md
+    assert "inference 1.250s" in md
+    assert "total 125 tokens" in md
 
 
 def test_report_includes_ai_review_error_when_present():
