@@ -15,10 +15,20 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Desktop GUI `invoice-sorter-gui` (PySide6) — threaded, offscreen smoke-tested.
 - ✅ Extraction backends: Docling (installed) → light (pdfplumber/pypdf,
   pytesseract) → graceful manual-review. Auto-selected at runtime.
+- ✅ **Hybrid extraction (NEW):** `extract_document` now returns two views —
+  `text` (rich Docling markdown, used for amounts/metadata) and
+  `classification_text` (plain text, used for classification). It prefers the
+  light backend's plain text for classification (classifies best) and falls back
+  to `normalize_for_classification(text)`. `orchestrator.process_file` classifies
+  on `extraction.classify_text()` and extracts metadata from `extraction.text`.
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **30 pytest passing.**
+- ✅ **32 pytest passing.**
+- ⏳ NOT yet measured: hybrid manual-review count on the 38 real PDFs (expected
+  ~16 like the light backend, but with Docling-quality amounts). Run:
+  `.venv/bin/invoice-sorter --input ./tax_input_docs --output /tmp/out --dry-run`
+  then check `/tmp/out/invoice_summary.md`.
 - ✅ Docling verified on Apple Silicon (torch MPS) and **offline** with
   `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`.
 
@@ -75,13 +85,16 @@ backend).
 
 ## Suggested next steps
 
-1. **Hybrid extraction**: in `extraction_adapter`, return both a Docling-parsed
-   amount view and a normalized plain-text view; classify on the text, take
-   amounts from Docling. Removes the light-vs-Docling tradeoff.
+1. **Verify the hybrid** on the 38 real PDFs (see the ⏳ item above). Confirm the
+   manual-review count is ~16 (not 20) while amounts come from Docling. If a
+   Docling document still classifies poorly, improve `normalize_for_classification`
+   (e.g. ensure spaces between glued table tokens).
 2. **GUI backend selector** (light vs Docling) in `gui.py`.
 3. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
 4. **Ollama assist** (optional, local) as a tie-breaker for manual-review files.
 5. Help the user finish `categories.local.yaml` for their real vendors.
+6. Consider making `scripts/suggest_local_config.py` use `classify_text()` too
+   (it currently classifies on the raw extracted text in the `--use-docling` path).
 
 ## Not committed yet
 

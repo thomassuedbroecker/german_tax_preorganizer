@@ -11,8 +11,17 @@ from invoice_sorter.metadata_extraction import (
     extract_invoice_number,
     extract_metadata,
     extract_vendor,
+    normalize_for_classification,
     parse_amount,
 )
+
+
+def test_normalize_for_classification_flattens_markdown():
+    md = "## Rechnung\n\n| Pos | Artikel |\n| --- | --- |\n| 1 | **DSL** Internet |"
+    plain = normalize_for_classification(md)
+    assert "#" not in plain and "|" not in plain and "*" not in plain
+    assert "DSL Internet" in plain
+    assert "---" not in plain
 
 GERMAN_INVOICE = """
 Rechnung

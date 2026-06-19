@@ -174,21 +174,42 @@ def _extract_image_light(path: Path) -> ExtractionResult:
 # --- public API ----------------------------------------------------------
 
 def extract_document(path: Path) -> ExtractionResult:
-    """Extract text from a single PDF or image, trying backends in order."""
-    path = Path(path)
+    """Extract one document with a hybrid strategy.
 
+    ``text`` = richest view (Docling markdown) for amount/metadata extraction.
+    ``classification_text`` = a plain-text view for keyword classification:
+    we prefer the light backend's plain text (it classifies best), and fall
+    back to a flattened version of the rich text.
+    """
+    from .metadata_extraction import normalize_for_classification
+
+    path = Path(path)
+    is_image = path.suffix.lower() in IMAGE_EXTS
+
+    # --- amount/metadata view: Docling preferred, else light ---
+    primary: ExtractionResult | None = None
     for backend in (_extract_with_factory, _extract_with_docling):
         result = backend(path)
         if result is not None and result.status in (
             ExtractionStatus.OK,
             ExtractionStatus.OCR_USED,
         ):
-            return result
+            primary = result
+            break
+    if primary is None:
+        primary = _extract_image_light(path) if is_image else _extract_pdf_light(path)
 
-    # Light fallback by file type.
-    if path.suffix.lower() in IMAGE_EXTS:
-        return _extract_image_light(path)
-    return _extract_pdf_light(path)
+    # --- classification view ---
+    if primary.backend in ("pdfplumber", "pypdf"):
+        primary.classification_text = primary.text  # already plain
+    elif not is_image:
+        light = _extract_pdf_light(path)
+        if light.text and len(light.text.strip()) >= _MIN_USEFUL_CHARS:
+            primary.classification_text = light.text
+    if not primary.classification_text:
+        primary.classification_text = normalize_for_classification(primary.text)
+
+    return primary
 
 
 def active_backend() -> str:

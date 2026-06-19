@@ -165,11 +165,12 @@ python scripts/suggest_local_config.py --input ./your_folder
 Then open `config/categories.local.yaml`, move the `# REVIEW` vendor tokens
 under the right categories, and run with `--config config/categories.local.yaml`.
 
-> **Backend choice matters for sorting.** Empirically, the **light** backend
-> classifies these invoices *better* than Docling, because Docling's Markdown
-> output (table cells, `#` headers) disrupts keyword matching. **Docling is
-> better for amount/VAT extraction.** A good future split: extract amounts with
-> Docling, classify on normalized plain text.
+> **Hybrid extraction (implemented).** Docling's Markdown output (table cells,
+> `#` headers) classifies *worse* than plain text, but extracts amounts/VAT
+> *better*. So the pipeline now uses **two views**: amounts/metadata come from
+> Docling's rich text, while classification runs on a plain-text view (the light
+> backend's text when available, else `normalize_for_classification()` of the
+> Markdown). You get Docling-quality amounts with light-quality sorting.
 
 ## 9. Interpreting the confidence score
 

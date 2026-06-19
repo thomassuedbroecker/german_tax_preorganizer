@@ -67,14 +67,25 @@ class InvoiceMetadata:
 
 @dataclass
 class ExtractionResult:
-    """Text extracted from one document, plus how it was obtained."""
+    """Text extracted from one document, plus how it was obtained.
+
+    Hybrid views: ``text`` is the richest available text (Docling markdown with
+    tables) used for amount/metadata extraction; ``classification_text`` is a
+    plain-text view used for keyword classification (Docling markdown classifies
+    worse, so we prefer plain text). When only one view exists they are equal.
+    """
 
     text: str = ""
+    classification_text: str = ""
     unit_count: int = 0  # pages / slides / sheets
     ocr_used: bool = False
     status: ExtractionStatus = ExtractionStatus.NO_TEXT
     backend: str = "none"
     error: Optional[str] = None
+
+    def classify_text(self) -> str:
+        """Text to classify on — falls back to ``text`` when not set separately."""
+        return self.classification_text or self.text
 
 
 @dataclass

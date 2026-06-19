@@ -3,7 +3,20 @@
 from __future__ import annotations
 
 from invoice_sorter.classifier import classify
-from invoice_sorter.metadata_extraction import extract_metadata
+from invoice_sorter.metadata_extraction import (
+    extract_metadata,
+    normalize_for_classification,
+)
+
+
+def test_hybrid_classifies_docling_markdown(config):
+    # A Docling-style markdown table classifies correctly once normalized.
+    md = "# Telekom\n\n| Produkt | Preis |\n| --- | --- |\n| DSL Internet | 50,00 EUR |"
+    plain = normalize_for_classification(md)
+    meta = extract_metadata(md, config)          # amounts from rich markdown
+    result = classify(plain, meta, config)        # classify on plain text
+    assert result.category == "Internet"
+    assert meta.vendor == "Telekom"
 
 
 def test_clear_classification(config):

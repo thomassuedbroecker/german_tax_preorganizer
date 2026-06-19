@@ -35,14 +35,16 @@ def process_file(source: Path, options: RunOptions) -> DocumentResult:
     config = options.config
     try:
         extraction = extract_document(source)
-        result.text = extraction.text
+        class_text = extraction.classify_text()
+        # Hold the plain text for routing/length checks; amounts use rich text.
+        result.text = class_text
         result.extraction_status = extraction.status
         result.backend = extraction.backend
         if extraction.error:
             result.add_error(extraction.error)
 
         result.metadata = extract_metadata(extraction.text, config)
-        classification = classify(extraction.text, result.metadata, config)
+        classification = classify(class_text, result.metadata, config)
         result.confidence = classification.confidence
         for note in classification.notes:
             result.add_note(note)

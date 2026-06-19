@@ -64,6 +64,20 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[ \t]+", " ", text)
 
 
+def normalize_for_classification(text: str) -> str:
+    """Flatten Markdown so keyword matching is not disrupted.
+
+    Docling outputs Markdown (``| cell |``, ``# heading``, ``**bold**``, ``---``
+    rules) which can fence or glue tokens. This reduces it to plain text with
+    single spaces, which classifies far better than raw Markdown.
+    """
+    if not text:
+        return ""
+    text = re.sub(r"[|#>*_`]", " ", text)   # markdown punctuation -> space
+    text = re.sub(r"-{2,}", " ", text)        # table rule rows ---
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def parse_amount(raw: str) -> Optional[Decimal]:
     """Parse a localized amount string into ``Decimal``.
 
