@@ -130,6 +130,7 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
  - ✅ GUI: added `Export CSV` button to save the table view to a CSV file.
  - ✅ GUI: added `Export CSV` button to save the table view to a CSV file.
  - ✅ GUI: added `Generate Exec PDF` (AI-assisted) to produce an executive PDF report. It uses the local AI review text (when enabled) and the standard Markdown report rendered into a PDF.
+ - ✅ GUI: shows elapsed runtime during a run (processed/remaining/total plus `elapsed H:MM:SS`) and appends final elapsed time to the run summary.
 - Starting customizable local AI inspection prompts: add a runtime template under
   `config/`, CLI/GUI prompt-file selection, and keep `prompts/` reserved for
   interaction history.

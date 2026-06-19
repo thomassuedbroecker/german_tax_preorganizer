@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 import csv
+import time
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -61,6 +62,16 @@ def _cell(value) -> str:
     return str(value)
 
 
+def _format_elapsed(seconds: int) -> str:
+    """Format seconds as H:MM:SS or M:SS."""
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
 class Worker(QObject):
     """Runs the pipeline off the UI thread."""
 
@@ -94,6 +105,7 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._worker: Worker | None = None
         self._last_output: Path | None = None
+        self._run_start: float | None = None
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -243,6 +255,16 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, maximum)
         self.progress.setValue(completed if total else maximum)
         self.progress.setFormat(f"{completed} / {total} documents")
+        # Show live processed and remaining counts in the summary label.
+        remaining = max(total - completed, 0)
+        # include elapsed time if available
+        elapsed_text = ""
+        if getattr(self, "_run_start", None):
+            elapsed = int(time.time() - self._run_start)
+            elapsed_text = f" · elapsed { _format_elapsed(elapsed) }"
+        self.summary_label.setText(
+            f"Working… processed {completed} · remaining {remaining} · total {total}{elapsed_text}"
+        )
 
     def _on_stop(self) -> None:
         if self._worker is None:
@@ -288,6 +310,9 @@ class MainWindow(QMainWindow):
         )
         self._last_output = output_dir
 
+        # record start time for elapsed display
+        self._run_start = time.time()
+
         self._set_busy(True)
         self.summary_label.setText("Working… (Docling can take a while on first run)")
 
@@ -330,6 +355,13 @@ class MainWindow(QMainWindow):
             f"review {manual} · failed {failed} · unsupported "
             f"{len(summary.unsupported_files)}"
         )
+
+        # final elapsed display
+        if getattr(self, "_run_start", None):
+            elapsed = int(time.time() - self._run_start)
+            # append elapsed to the summary label
+            self.summary_label.setText(self.summary_label.text() + f" · elapsed { _format_elapsed(elapsed) }")
+            self._run_start = None
 
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(results))
