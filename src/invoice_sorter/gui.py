@@ -16,6 +16,7 @@ from threading import Event
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices
+import csv
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -172,9 +173,13 @@ class MainWindow(QMainWindow):
         self.open_folder_btn = QPushButton("Open output folder")
         self.open_folder_btn.clicked.connect(self._open_folder)
         self.open_folder_btn.setEnabled(False)
+        self.export_csv_btn = QPushButton("Export CSV")
+        self.export_csv_btn.clicked.connect(self._export_table_csv)
+        self.export_csv_btn.setEnabled(False)
         run_row.addWidget(self.run_btn)
         run_row.addWidget(self.stop_btn)
         run_row.addWidget(self.open_report_btn)
+        run_row.addWidget(self.export_csv_btn)
         run_row.addWidget(self.open_folder_btn)
         run_row.addStretch(1)
         self.progress = QProgressBar()
@@ -335,6 +340,11 @@ class MainWindow(QMainWindow):
                 elif is_manual:
                     item.setBackground(QColor(185, 28, 28))
                     item.setForeground(QColor(255, 255, 255))
+                # Confidence column (col 6): exact 1.0 -> dark green + white text,
+                # high confidence >= 0.9 -> light green.
+                elif col == 6 and r.confidence >= 0.9999:
+                    item.setBackground(QColor(0, 100, 0))
+                    item.setForeground(QColor(255, 255, 255))
                 elif col == 6 and r.confidence >= 0.9:
                     item.setBackground(QColor(224, 245, 224))
                 self.table.setItem(row, col, item)
@@ -349,6 +359,31 @@ class MainWindow(QMainWindow):
     def _open_folder(self) -> None:
         if self._last_output:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._last_output)))
+
+    def _export_table_csv(self) -> None:
+        # Prompt for save location and write current table contents as CSV.
+        default_path = (
+            str(self._last_output / "invoice_table.csv") if self._last_output else ""
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export table to CSV", default_path, "CSV files (*.csv);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                # header
+                writer.writerow(_COLUMNS)
+                for row in range(self.table.rowCount()):
+                    row_values = []
+                    for col in range(self.table.columnCount()):
+                        item = self.table.item(row, col)
+                        row_values.append(item.text() if item is not None else "")
+                    writer.writerow(row_values)
+            QMessageBox.information(self, "Export complete", f"Wrote CSV to {path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export failed", str(exc))
 
 
 def main() -> int:

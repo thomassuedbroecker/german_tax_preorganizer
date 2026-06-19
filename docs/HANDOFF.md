@@ -124,6 +124,10 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   writes partial report/audit/performance outputs. Final pytest -> **47 passed**.
 - Manual-review/unidentified GUI rows now use a dark red background with white
   text instead of yellow/black; failed rows remain light red.
+- ✅ UI confidence coloring: rows with confidence == 1.0 now use a dark green
+  background with white text; high-confidence rows (>= 0.90) use a light
+  green background.
+ - ✅ GUI: added `Export CSV` button to save the table view to a CSV file.
 - Starting customizable local AI inspection prompts: add a runtime template under
   `config/`, CLI/GUI prompt-file selection, and keep `prompts/` reserved for
   interaction history.
