@@ -58,6 +58,35 @@ def test_stop_button_requests_worker_cancellation(app):
     window.close()
 
 
+def test_agent_server_starts_on_window_init(app, monkeypatch):
+    class DummyHandle:
+        def __init__(self):
+            self.shutdown_called = False
+
+        def shutdown(self):
+            self.shutdown_called = True
+
+    dummy_handle = DummyHandle()
+    started = {}
+
+    def fake_start_agent_server(host, port):
+        started["host"] = host
+        started["port"] = port
+        return dummy_handle
+
+    monkeypatch.setattr("invoice_sorter.gui.start_agent_server", fake_start_agent_server)
+
+    window = MainWindow()
+
+    assert window._agent_handle is dummy_handle
+    assert started["host"] == "127.0.0.1"
+    assert started["port"] == 8080
+    assert window.agent_status_label.text() == "Agent server: http://127.0.0.1:8080"
+
+    window.close()
+    assert dummy_handle.shutdown_called is True
+
+
 def test_manual_review_rows_use_red_background_and_white_text(app):
     window = MainWindow()
     result = DocumentResult(source_path=Path("anonymous.pdf"))

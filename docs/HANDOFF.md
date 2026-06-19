@@ -9,36 +9,72 @@ extracts metadata (DE/EN), classifies into configurable categories, copies files
 into category folders, and writes a Markdown report + JSONL audit log. Built for
 organizing invoices for a tax advisor. **Everything runs on-machine.**
 
-## Current status (2026-06-19)
+## Current status (2026-06-20)
 
 - ✅ CLI `invoice-sorter` — end-to-end, dry-run + real run.
 - ✅ Desktop GUI `invoice-sorter-gui` (PySide6) — threaded, offscreen smoke-tested.
 - ✅ Extraction backends: Docling (installed) → light (pdfplumber/pypdf,
   pytesseract) → graceful manual-review. Auto-selected at runtime.
-- ✅ **Hybrid extraction (NEW):** `extract_document` now returns two views —
-  `text` (rich Docling markdown, used for amounts/metadata) and
-  `classification_text` (plain text, used for classification). It prefers the
-  light backend's plain text for classification (classifies best) and falls back
-  to `normalize_for_classification(text)`. `orchestrator.process_file` classifies
-  on `extraction.classify_text()` and extracts metadata with
-  `extract_metadata_hybrid(...)`: monetary fields from rich text, missing
-  non-monetary fields from plain text.
+- ✅ **Hybrid extraction:** `extract_document` returns `text` (rich Docling markdown)
+  and `classification_text` (plain text). Classification uses plain text;
+  metadata extraction uses hybrid (rich for amounts, fallback to plain for missing
+  non-monetary fields).
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **50 pytest passing** after Codex regression tests for hybrid metadata,
-  local-config helper classification, backend selection, local AI review,
-  performance telemetry, GUI progress/cancellation/color controls, custom runtime
-  prompts, and temperature configuration.
-- ✅ Hybrid manual-review verification completed on the 38 local PDFs with output
-  outside the repo at `/private/tmp/german_tax_preorganizer_hybrid_out`.
-  Final aggregate result: **38 processed, 0 unsupported, 16 manual-review, 22
-  classified**. This matches the light-backend manual-review count while keeping
-  rich Docling text for monetary metadata.
+- ✅ **55 pytest passing** (up from 50): added streaming agent tests, GUI ExecReportWorker
+  tests, and server endpoint tests.
+- ✅ Hybrid manual-review verified: **38 processed, 0 unsupported, 16 manual-review, 22
+  classified** on real PDFs. Docling text preserved for monetary fields.
 - ✅ Docling verified on Apple Silicon (torch MPS) and **offline** with
   `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`.
+- ✅ **Streaming Agent Integration (NEW):** LangGraph agent REST service runs in-app
+  (`agent_service.py`). `/api/executive-report-stream` endpoint returns newline-delimited
+  JSON chunks. GUI `ExecReportWorker` (QThread) consumes stream, displays in modal dialog.
+- ✅ **GitHub Actions CI (NEW):** `.github/workflows/ci.yml` runs pytest across
+  ubuntu/macos × Python 3.11/3.12 matrix.
+- ✅ **Category Editing (NEW):** Double-click Category column or use "Edit Category" button
+  to change. "Undo Last Change" reverts edits. "Export Corrections" saves as CSV for audit.
+  Changes tracked in in-memory `CorrectionLog`.
+- ✅ **GUI Enhancements:** Progress shows elapsed/ETA/percent; Export CSV/PDF buttons;
+  double-click source file to open; confidence-based row coloring.
 
 ## Live update log
+
+### 2026-06-20 Streaming & Category Editing
+
+- Implemented streaming agent endpoints in `agent_service.py`:
+  - New `/api/executive-report-stream` returns newline-delimited JSON chunks.
+  - New `_stream_ndjson()` helper on request handler.
+  - Server streams report in 400-char chunks with 50ms inter-chunk delay.
+- Added streaming client helper `request_executive_report_stream()` in `agent_client.py`:
+  - Generator that yields chunks as they arrive from ndjson response.
+  - Uses stdlib urllib with streaming line iteration.
+- Integrated GUI streaming consumer:
+  - New `ExecReportWorker` (QThread) consumes streaming generator.
+  - Emits chunks via Qt signals to modal text dialog.
+  - Dialog appends chunks in real-time; completion message on finish.
+  - "Agent Exec Report" button now shows progressive report output.
+- Added three new unit tests:
+  - `test_request_executive_report_stream_reads_ndjson`: mocks urllib, verifies client parsing.
+  - `test_exec_report_worker_emits_chunks_and_finishes`: mocks stream, verifies signals.
+  - `test_executive_report_stream_endpoint` + `test_document_advice_endpoint`: start ephemeral server, verify endpoints.
+  - All 55 tests passing.
+- Created GitHub Actions CI workflow `.github/workflows/ci.yml`:
+  - Matrix: ubuntu/macos × Python 3.11/3.12.
+  - Steps: checkout, setup Python, install deps, run pytest.
+  - QT_QPA_PLATFORM=offscreen for headless GUI tests.
+  - Committed to `ci/add-github-actions` branch, merged to main.
+- Implemented category editing features in `gui.py`:
+  - New `CorrectionLog` class tracks changes (row, old_category, new_category) with undo.
+  - Double-click Category column opens QInputDialog: dropdown (from config) or free text.
+  - New "Edit Category" button for selected row.
+  - New "Undo Last Change" button reverts last change.
+  - New "Export Corrections" button saves as `category_corrections.csv`.
+  - Changes update underlying `_last_results` and table immediately.
+  - Correction log cleared on each new run.
+- Updated `docs/QUICK_START.md` with category editing guide.
+- Merged feature branch to main; all tests passing.
 
 ### 2026-06-19 Codex continuation
 
@@ -72,6 +108,16 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   sorting, appends a local AI sorting review to `invoice_summary.md`, and does
   not affect classification or routing. Runtime prompt is code-owned in
   `src/invoice_sorter/ai_review.py`; `prompts/` remains interaction history only.
+- Added automatic local agent REST server startup in the GUI. The app now
+  launches the agent service internally, shows its status, and makes the
+  Document Advice / Executive Report buttons usable without a separate server
+  process.
+- Added double-click opening for source files in the GUI table. Selecting a
+  row and double-clicking it opens the source invoice directly in the OS
+  default viewer.
+- Fixed PDF export in the GUI. `QTextDocument.print()` was replaced with
+  `QTextDocument.print_()` so executive PDF generation works with the installed
+  PySide6 version.
 - Added CLI flags `--ai-review`, `--ai-model`, and `--ai-base-url`; GUI has a
   Local AI review checkbox plus Ollama model/URL fields.
 - Verified `.venv/bin/python -m pytest -q` -> **43 passed** after AI review
@@ -197,33 +243,39 @@ backend).
 
 ## Suggested next steps
 
-1. ✅ Done: hybrid verified on the 38 real PDFs. Manual-review count is 16,
-   matching the light backend while preserving rich Docling text for monetary
-   fields.
-2. ✅ Done: GUI backend selector (Auto / Docling / Light) in `gui.py`, backed by
-   `RunOptions.extraction_backend`. CLI also has `--backend`.
-3. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
-4. Partly done: optional local Ollama report review is implemented. Still open:
-   optional Ollama assist as a tie-breaker for manual-review files.
-5. Help the user finish `categories.local.yaml` for their real vendors.
-6. ✅ Done: `scripts/suggest_local_config.py` now uses `classify_text()` for
-   classification in both analysis and reroute-count passes.
+1. ✅ Done: hybrid verified on 38 real PDFs (16 manual-review, 22 classified).
+2. ✅ Done: GUI backend selector (Auto/Docling/Light).
+3. ✅ Done: Streaming agent endpoints + GUI consumer + CI workflow.
+4. ✅ Done: Category editing, undo, and corrections export.
+5. **Batch category edits:** Select multiple rows, apply category to all.
+6. **Persist corrections:** Option to re-run with user-edited categories or save
+   edits back to audit log.
+7. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
+8. **Optional Ollama tie-breaker:** Use agent to resolve manual-review files.
+9. Help the user finish `categories.local.yaml` for their real vendors.
+10. **Streaming response improvements:** Add progress/status messages in chunks
+    (e.g., "Processing...", "Complete").
 
-## Not committed yet
+## All work committed
 
-Nothing from this continuation has been committed. Current changed files:
+Final commits on `main` (after merging `ci/add-github-actions`):
 
-- Modified: `.gitignore`
-- Modified: `README.md`
-- Modified: `docs/HANDOFF.md`
-- Modified: `docs/QUICK_START.md`
-- Modified: `src/invoice_sorter/ai_review.py`
-- Modified: `src/invoice_sorter/cli.py`
-- Modified: `src/invoice_sorter/gui.py`
-- Modified: `src/invoice_sorter/orchestrator.py`
-- Modified: `tests/test_ai_review.py`
-- Modified: `tests/test_cli_dry_run.py`
-- Modified: `tests/test_gui_controls.py`
-- Untracked: `config/ai_review_prompt.txt`
+```
+dccfcbc docs: add category editing features to QUICK_START
+862cf12 feat: add Edit Category button, Undo, and export corrections log
+fc6148d ci: add GitHub Actions CI matrix (OS+Python)
+5300072 tests: add streaming client, ExecReportWorker, and server endpoint tests
+```
 
-Repo is on `main` with one initial commit. Branch before committing.
+Key files changed/added:
+- Added: `ARCHITECTURE.md` — system design, data flow, module responsibilities.
+- Added: `.github/workflows/ci.yml` — GitHub Actions matrix (ubuntu/macos × 3.11/3.12).
+- Added: `tests/test_agent_streaming.py`, `tests/test_exec_stream_gui.py`, `tests/test_agent_server_endpoints.py`.
+- Modified: `src/invoice_sorter/agent_service.py` (streaming endpoint + ndjson helper).
+- Modified: `src/invoice_sorter/agent_client.py` (streaming client generator).
+- Modified: `src/invoice_sorter/gui.py` (ExecReportWorker, CorrectionLog, category editing, undo/export).
+- Modified: `docs/QUICK_START.md` (category editing guide).
+- Modified: `docs/HANDOFF.md` (this file).
+- Modified: `CONTENT_PROVENANCE.md` (updated AI integration notes).
+
+Repo is on `main`. All 55 tests passing. Ready for further development.

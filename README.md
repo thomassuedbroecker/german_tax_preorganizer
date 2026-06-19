@@ -18,6 +18,9 @@ on your machine.
 For the shortest setup and first dry run, see
 [docs/QUICK_START.md](docs/QUICK_START.md).
 
+For system design, architecture, data flow, and module responsibilities, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## 1. What the tool does
 
 1. Recursively scans an input folder for `PDF, JPG, JPEG, PNG, TIFF`.
@@ -141,11 +144,18 @@ The virtual environment contains PySide6 and the installed application. Without
 activating it, use `.venv/bin/invoice-sorter-gui`. You can also run
 `.venv/bin/python -m invoice_sorter.gui` as a module fallback.
 
+The GUI now launches its own local agent REST service automatically on
+startup using the default host/port shown in the Agent host / Agent port fields.
+The agent status label shows whether the server started successfully. Document
+Advice and Executive Report become available once a run has completed, without
+requiring a separate agent server process.
+
 Pick input/output folders and a config, toggle **Dry run** (on by default),
 choose a backend (**Auto**, **Docling**, or **Light**), optionally enable
 **Local AI review**, then click **Run**. Results appear in a sortable table
 (manual-review rows shown dark red with white text, failures light red,
-high-confidence values green);
+high-confidence values green); double-click a row to open the source invoice
+file.
 buttons open the report and output folder. The work runs in a background thread
 so the window stays responsive. A progress bar shows inspected/total documents.
 **Stop** requests cooperative cancellation: the current document finishes, then

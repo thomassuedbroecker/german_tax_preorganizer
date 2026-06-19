@@ -24,10 +24,23 @@ AI-assisted content is treated like any other contribution:
 
 ## Runtime AI
 
-The optional Ollama integration generates a local post-sort review. It does not
-classify documents or determine file placement. The runtime prompt is owned by
-`src/invoice_sorter/ai_review.py`; full extracted invoice text and private source
-paths are excluded from that prompt by design and tests.
+The optional Ollama integration has two components:
+
+1. **Post-sort review** (`ai_review.py`): After deterministic sorting completes,
+   generates a review of the aggregate category distribution and metadata. Does
+   not classify or change file placement. Only extracted metadata (counts, vendor
+   names, dates, amounts) — never full invoice text — is sent to the local Ollama
+   instance.
+
+2. **Agent REST service** (new): `agent_service.py` runs a LangGraph agent
+   endpoint locally on `127.0.0.1:8080`. Two endpoints:
+   - `/api/document-advice`: Accepts a single document result, returns AI-generated
+     advice on the classification decision.
+   - `/api/executive-report-stream`: Accepts a run summary, streams back an
+     executive report as newline-delimited JSON chunks (real-time display in GUI).
+
+   The agent wraps Ollama for inference. Full invoice text is never sent; only
+   extracted metadata fields (vendor, category, confidence, etc.) are provided.
 
 ## External Artifacts
 
