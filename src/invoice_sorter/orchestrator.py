@@ -13,7 +13,7 @@ from . import audit_log, file_operations, report
 from .classifier import classify
 from .config import Config
 from .extraction_adapter import extract_document
-from .metadata_extraction import extract_metadata
+from .metadata_extraction import extract_metadata_hybrid
 from .models import DocumentResult, ExtractionStatus, ProcessingStatus
 from .routing import route
 from .scanner import scan_folder
@@ -27,6 +27,7 @@ class RunOptions:
     dry_run: bool = False
     recursive: bool = True
     move: bool = False
+    extraction_backend: str = "auto"
 
 
 def process_file(source: Path, options: RunOptions) -> DocumentResult:
@@ -34,7 +35,7 @@ def process_file(source: Path, options: RunOptions) -> DocumentResult:
     result = DocumentResult(source_path=source)
     config = options.config
     try:
-        extraction = extract_document(source)
+        extraction = extract_document(source, backend=options.extraction_backend)
         class_text = extraction.classify_text()
         # Hold the plain text for routing/length checks; amounts use rich text.
         result.text = class_text
@@ -43,7 +44,7 @@ def process_file(source: Path, options: RunOptions) -> DocumentResult:
         if extraction.error:
             result.add_error(extraction.error)
 
-        result.metadata = extract_metadata(extraction.text, config)
+        result.metadata = extract_metadata_hybrid(extraction.text, class_text, config)
         classification = classify(class_text, result.metadata, config)
         result.confidence = classification.confidence
         for note in classification.notes:

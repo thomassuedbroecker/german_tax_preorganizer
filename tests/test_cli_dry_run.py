@@ -22,7 +22,7 @@ INTERNET_TEXT = (
 
 @pytest.fixture
 def fake_extract(monkeypatch):
-    def _fake(path):
+    def _fake(path, backend="auto"):
         return ExtractionResult(
             text=INTERNET_TEXT, unit_count=1, status=ExtractionStatus.OK,
             backend="fake",
@@ -74,3 +74,33 @@ def test_real_run_copies_into_category(tmp_path, config, fake_extract):
     entry = json.loads(lines[0])
     assert entry["category"] == "Internet"
     assert entry["status"] == "copied"
+
+
+def test_run_options_pass_extraction_backend(tmp_path, config, monkeypatch):
+    seen = []
+
+    def _fake(path, backend="auto"):
+        seen.append(backend)
+        return ExtractionResult(
+            text=INTERNET_TEXT,
+            unit_count=1,
+            status=ExtractionStatus.OK,
+            backend="fake",
+        )
+
+    monkeypatch.setattr(orchestrator, "extract_document", _fake)
+    input_dir = tmp_path / "in"
+    input_dir.mkdir()
+    (input_dir / "telekom.pdf").write_bytes(b"%PDF-1.4 fake")
+
+    options = RunOptions(
+        input_dir=input_dir,
+        output_dir=tmp_path / "out",
+        config=config,
+        dry_run=True,
+        extraction_backend="light",
+    )
+
+    orchestrator.run(options)
+
+    assert seen == ["light"]

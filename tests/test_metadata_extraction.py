@@ -10,6 +10,7 @@ from invoice_sorter.metadata_extraction import (
     extract_iban,
     extract_invoice_number,
     extract_metadata,
+    extract_metadata_hybrid,
     extract_vendor,
     normalize_for_classification,
     parse_amount,
@@ -108,3 +109,17 @@ def test_missing_values_stay_none(config):
     assert m.invoice_number is None
     assert m.gross_amount is None
     assert m.vendor is None
+
+
+def test_hybrid_metadata_falls_back_to_plain_text_for_non_amount_fields(config):
+    rich = "Rechnung\nGesamtbetrag: 119,00 EUR"
+    plain = (
+        "Rechnung von Telekom fuer DSL Internet Vertrag. "
+        "Rechnungsdatum: 15.03.2024. Gesamtbetrag: 999,00 EUR."
+    )
+
+    m = extract_metadata_hybrid(rich, plain, config)
+
+    assert m.vendor == "Telekom"
+    assert m.invoice_date == "2024-03-15"
+    assert m.gross_amount == Decimal("119.00")

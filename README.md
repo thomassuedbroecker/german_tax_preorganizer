@@ -8,6 +8,9 @@ a tax advisor plus a JSONL audit log.
 Built for a private user organizing invoices for a tax advisor. It runs entirely
 on your machine.
 
+For the shortest setup and first dry run, see
+[docs/QUICK_START.md](docs/QUICK_START.md).
+
 ## 1. What the tool does
 
 1. Recursively scans an input folder for `PDF, JPG, JPEG, PNG, TIFF`.
@@ -93,6 +96,7 @@ invoice-sorter \
   --input "/path/to/input/folder" \
   --output "/path/to/output/folder" \
   --config "config/categories.yaml" \
+  --backend auto \
   --dry-run
 ```
 
@@ -103,6 +107,7 @@ Options:
 | `--input` | Input folder with PDFs and images (required) |
 | `--output` | Output folder for sorted invoices and reports (required) |
 | `--config` | Path to category configuration (default: bundled `config/categories.yaml`) |
+| `--backend` | Extraction backend: `auto`, `docling`, or `light` (default: `auto`) |
 | `--dry-run` | Analyze only; do not copy files |
 | `--recursive` / `--no-recursive` | Scan subfolders (default: on) |
 | `--move` | Move instead of copy (default: copy — safer) |
@@ -119,9 +124,10 @@ invoice-sorter-gui
 ```
 
 Pick input/output folders and a config, toggle **Dry run** (on by default),
-click **Run**. Results appear in a sortable table (manual-review rows highlighted
-amber, failures red, high-confidence green); buttons open the report and output
-folder. The work runs in a background thread so the window stays responsive.
+choose a backend (**Auto**, **Docling**, or **Light**), then click **Run**.
+Results appear in a sortable table (manual-review rows highlighted amber,
+failures red, high-confidence green); buttons open the report and output folder.
+The work runs in a background thread so the window stays responsive.
 
 ## 7. How dry-run works
 
@@ -167,10 +173,11 @@ under the right categories, and run with `--config config/categories.local.yaml`
 
 > **Hybrid extraction (implemented).** Docling's Markdown output (table cells,
 > `#` headers) classifies *worse* than plain text, but extracts amounts/VAT
-> *better*. So the pipeline now uses **two views**: amounts/metadata come from
-> Docling's rich text, while classification runs on a plain-text view (the light
-> backend's text when available, else `normalize_for_classification()` of the
-> Markdown). You get Docling-quality amounts with light-quality sorting.
+> *better*. So the pipeline now uses **two views**: monetary metadata comes from
+> Docling's rich text, missing non-monetary metadata can fall back to plain text,
+> and classification runs on a plain-text view (the light backend's text when
+> available, else `normalize_for_classification()` of the Markdown). You get
+> Docling-quality amounts with light-quality sorting.
 
 ## 9. Interpreting the confidence score
 
@@ -197,17 +204,15 @@ with low confidence, or confidence is below the configured threshold.
 
 ## 11. Future improvements
 
-- **Hybrid extraction:** amounts via Docling, classification via normalized plain
-  text (best of both — see the note in §8).
 - Optional **DOCX** export for Apple Pages.
 - Optional local **Ollama** LLM assist for classification (augmenting, not
   replacing, the rule-based result), following the author's `pdf_extraction_macos`
   project. The `docling_preprocessor_factory` repo can be wired into
   `extraction_adapter._extract_with_factory` if preferred over plain Docling.
-- A GUI backend selector (light vs Docling).
 
-Done already: CLI, Docling backend, **PySide6 desktop GUI**, rule-based
-classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
+Done already: CLI, Docling backend, hybrid extraction, backend selection,
+**PySide6 desktop GUI**, rule-based classifier, Markdown report, JSONL audit log,
+dry-run, real-data tuning script.
 
 ## Project structure
 

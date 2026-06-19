@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from invoice_sorter.classifier import classify  # noqa: E402
 from invoice_sorter.config import load_config  # noqa: E402
 from invoice_sorter.extraction_adapter import _extract_pdf_light  # noqa: E402
-from invoice_sorter.metadata_extraction import extract_metadata  # noqa: E402
+from invoice_sorter.metadata_extraction import extract_metadata_hybrid  # noqa: E402
 from invoice_sorter.models import DocumentResult, ProcessingStatus  # noqa: E402
 from invoice_sorter.routing import route  # noqa: E402
 
@@ -157,11 +157,12 @@ def analyze(input_dir: Path, config, extract):
     unknown: list[str] = []
     for pdf in sorted(input_dir.rglob("*.pdf")):
         ex = extract(pdf)
+        class_text = ex.classify_text()
         r = DocumentResult(source_path=pdf)
-        r.text = ex.text
+        r.text = class_text
         r.extraction_status = ex.status
-        r.metadata = extract_metadata(ex.text, config)
-        c = classify(ex.text, r.metadata, config)
+        r.metadata = extract_metadata_hybrid(ex.text, class_text, config)
+        c = classify(class_text, r.metadata, config)
         r.confidence = c.confidence
         r.category = route(r, c, config)
         if r.status == ProcessingStatus.MANUAL_REVIEW:
@@ -206,11 +207,12 @@ def reroute_count(input_dir: Path, config, extract) -> int:
     manual = 0
     for pdf in sorted(input_dir.rglob("*.pdf")):
         ex = extract(pdf)
+        class_text = ex.classify_text()
         r = DocumentResult(source_path=pdf)
-        r.text = ex.text
+        r.text = class_text
         r.extraction_status = ex.status
-        r.metadata = extract_metadata(ex.text, config)
-        c = classify(ex.text, r.metadata, config)
+        r.metadata = extract_metadata_hybrid(ex.text, class_text, config)
+        c = classify(class_text, r.metadata, config)
         r.confidence = c.confidence
         route(r, c, config)
         if r.status == ProcessingStatus.MANUAL_REVIEW:

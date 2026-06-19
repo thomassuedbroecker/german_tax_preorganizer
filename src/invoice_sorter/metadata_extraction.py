@@ -241,3 +241,29 @@ def extract_metadata(text: str, config: Config) -> InvoiceMetadata:
         payment_date=extract_date(text, _PAYMENT_DATE_LABELS),
         iban=extract_iban(text),
     )
+
+
+def extract_metadata_hybrid(
+    rich_text: str, classification_text: str, config: Config
+) -> InvoiceMetadata:
+    """Extract rich metadata, with non-monetary fallback from plain text.
+
+    Docling markdown is better for amounts/tables, but configured vendor tokens,
+    dates, and identifiers can be easier to match in the plain text view.
+    Monetary fields stay sourced from the rich extraction view.
+    """
+    metadata = extract_metadata(rich_text, config)
+    if not classification_text or classification_text == rich_text:
+        return metadata
+
+    fallback = extract_metadata(classification_text, config)
+    for field_name in (
+        "vendor",
+        "invoice_date",
+        "invoice_number",
+        "payment_date",
+        "iban",
+    ):
+        if getattr(metadata, field_name) is None:
+            setattr(metadata, field_name, getattr(fallback, field_name))
+    return metadata

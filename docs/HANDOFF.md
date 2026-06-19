@@ -20,17 +20,52 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   `classification_text` (plain text, used for classification). It prefers the
   light backend's plain text for classification (classifies best) and falls back
   to `normalize_for_classification(text)`. `orchestrator.process_file` classifies
-  on `extraction.classify_text()` and extracts metadata from `extraction.text`.
+  on `extraction.classify_text()` and extracts metadata with
+  `extract_metadata_hybrid(...)`: monetary fields from rich text, missing
+  non-monetary fields from plain text.
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **32 pytest passing.**
-- ⏳ NOT yet measured: hybrid manual-review count on the 38 real PDFs (expected
-  ~16 like the light backend, but with Docling-quality amounts). Run:
-  `.venv/bin/invoice-sorter --input ./tax_input_docs --output /tmp/out --dry-run`
-  then check `/tmp/out/invoice_summary.md`.
+- ✅ **38 pytest passing** after Codex regression tests for hybrid metadata,
+  local-config helper classification, and backend selection.
+- ✅ Hybrid manual-review verification completed on the 38 local PDFs with output
+  outside the repo at `/private/tmp/german_tax_preorganizer_hybrid_out`.
+  Final aggregate result: **38 processed, 0 unsupported, 16 manual-review, 22
+  classified**. This matches the light-backend manual-review count while keeping
+  rich Docling text for monetary metadata.
 - ✅ Docling verified on Apple Silicon (torch MPS) and **offline** with
   `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`.
+
+## Live update log
+
+### 2026-06-19 Codex continuation
+
+- Fixed `scripts/suggest_local_config.py` so Docling/hybrid mode classifies on
+  `ExtractionResult.classify_text()` while still extracting metadata and vendor
+  candidates from rich text.
+- Added `extract_metadata_hybrid(...)`: monetary fields stay sourced from rich
+  Docling text, while missing non-monetary fields (vendor, invoice date, invoice
+  number, payment date, IBAN) fall back to the plain classification text.
+- Added `tests/test_suggest_local_config.py` to prevent that helper from
+  regressing to rich-text classification.
+- Verified `.venv/bin/python -m pytest -q` -> **35 passed**.
+- First real-data hybrid dry run completed with 38 processed, 0 unsupported,
+  18 manual-review, 20 classified. Light-only count under current code was still
+  16 manual-review / 22 classified. The two hybrid regressions were Software /
+  Cloud cases that matched the category but fell below confidence threshold
+  because a non-monetary field was missing from rich text.
+- After broadening the fallback to non-monetary metadata, final real-data hybrid
+  dry run completed with **38 processed, 0 unsupported, 16 manual-review, 22
+  classified**.
+- Implemented backend selection plumbing: `extract_document(path, backend=...)`,
+  `RunOptions.extraction_backend`, CLI `--backend`, and GUI Auto/Docling/Light
+  combo box.
+- Updated README for `--backend`, the GUI selector, and the refined hybrid
+  metadata behavior.
+- Verified `.venv/bin/python -m pytest -q` -> **38 passed** after backend
+  selection changes.
+- Added `docs/QUICK_START.md` with first-run setup, dry-run, GUI, local config,
+  offline Docling, and test commands. README now links to it near the top.
 
 ## ⚠️ Privacy rules — do not break
 
@@ -85,18 +120,33 @@ backend).
 
 ## Suggested next steps
 
-1. **Verify the hybrid** on the 38 real PDFs (see the ⏳ item above). Confirm the
-   manual-review count is ~16 (not 20) while amounts come from Docling. If a
-   Docling document still classifies poorly, improve `normalize_for_classification`
-   (e.g. ensure spaces between glued table tokens).
-2. **GUI backend selector** (light vs Docling) in `gui.py`.
+1. ✅ Done: hybrid verified on the 38 real PDFs. Manual-review count is 16,
+   matching the light backend while preserving rich Docling text for monetary
+   fields.
+2. ✅ Done: GUI backend selector (Auto / Docling / Light) in `gui.py`, backed by
+   `RunOptions.extraction_backend`. CLI also has `--backend`.
 3. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
 4. **Ollama assist** (optional, local) as a tie-breaker for manual-review files.
 5. Help the user finish `categories.local.yaml` for their real vendors.
-6. Consider making `scripts/suggest_local_config.py` use `classify_text()` too
-   (it currently classifies on the raw extracted text in the `--use-docling` path).
+6. ✅ Done: `scripts/suggest_local_config.py` now uses `classify_text()` for
+   classification in both analysis and reroute-count passes.
 
 ## Not committed yet
 
-Nothing has been committed. Repo is on `main` with one initial commit; all new
-files are untracked. Branch before committing.
+Nothing from this continuation has been committed. Current changed files:
+
+- Modified: `docs/HANDOFF.md`
+- Modified: `README.md`
+- Modified: `scripts/suggest_local_config.py`
+- Modified: `src/invoice_sorter/cli.py`
+- Modified: `src/invoice_sorter/extraction_adapter.py`
+- Modified: `src/invoice_sorter/gui.py`
+- Modified: `src/invoice_sorter/metadata_extraction.py`
+- Modified: `src/invoice_sorter/orchestrator.py`
+- Modified: `tests/test_cli_dry_run.py`
+- Modified: `tests/test_metadata_extraction.py`
+- Untracked: `docs/QUICK_START.md`
+- Untracked: `tests/test_extraction_adapter.py`
+- Untracked: `tests/test_suggest_local_config.py`
+
+Repo is on `main` with one initial commit. Branch before committing.

@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
@@ -108,11 +109,16 @@ class MainWindow(QMainWindow):
         self.recursive = QCheckBox("Recursive")
         self.recursive.setChecked(True)
         self.move = QCheckBox("Move instead of copy")
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem(f"Auto ({active_backend()})", "auto")
+        self.backend_combo.addItem("Docling", "docling")
+        self.backend_combo.addItem("Light", "light")
         opts.addWidget(self.dry_run)
         opts.addWidget(self.recursive)
         opts.addWidget(self.move)
         opts.addStretch(1)
-        opts.addWidget(QLabel(f"Backend: <b>{active_backend()}</b>"))
+        opts.addWidget(QLabel("Backend"))
+        opts.addWidget(self.backend_combo)
         root.addLayout(opts)
 
         # --- run row ----------------------------------------------------
@@ -193,6 +199,7 @@ class MainWindow(QMainWindow):
             dry_run=self.dry_run.isChecked(),
             recursive=self.recursive.isChecked(),
             move=self.move.isChecked(),
+            extraction_backend=self.backend_combo.currentData(),
         )
         self._last_output = output_dir
 

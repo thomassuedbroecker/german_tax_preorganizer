@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import ConfigError, load_config
-from .extraction_adapter import active_backend
+from .extraction_adapter import EXTRACTION_BACKENDS, active_backend
 from .orchestrator import RunOptions, run
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "categories.yaml"
@@ -26,6 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, help="Output folder for sorted invoices and reports")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG), help="Path to category configuration (YAML/JSON)")
     parser.add_argument("--dry-run", action="store_true", help="Analyze only; do not copy files")
+    parser.add_argument(
+        "--backend",
+        choices=EXTRACTION_BACKENDS,
+        default="auto",
+        help="Extraction backend: auto/docling prefer Docling with light fallback; light skips Docling",
+    )
     parser.add_argument(
         "--recursive", action=argparse.BooleanOptionalAction, default=True,
         help="Scan subfolders (default: on; use --no-recursive to disable)",
@@ -49,7 +55,11 @@ def _print_summary(results, summary, options, verbose: bool) -> None:
         table = Table(title="Invoice Sorter — Summary")
         table.add_column("Metric")
         table.add_column("Value", justify="right")
-        table.add_row("Extraction backend", active_backend())
+        selected_backend = (
+            active_backend() if options.extraction_backend == "auto"
+            else options.extraction_backend
+        )
+        table.add_row("Extraction backend", selected_backend)
         table.add_row("Mode", "DRY RUN" if summary.dry_run else ("MOVE" if options.move else "COPY"))
         table.add_row("Total scanned", str(summary.total_scanned))
         table.add_row("Processed", str(len(results)))
@@ -63,7 +73,11 @@ def _print_summary(results, summary, options, verbose: bool) -> None:
             cat_table.add_row(cat, str(by_cat[cat]))
         console.print(cat_table)
     except ImportError:  # rich not installed — plain fallback
-        print(f"Backend: {active_backend()}  Mode: "
+        selected_backend = (
+            active_backend() if options.extraction_backend == "auto"
+            else options.extraction_backend
+        )
+        print(f"Backend: {selected_backend}  Mode: "
               f"{'DRY RUN' if summary.dry_run else ('MOVE' if options.move else 'COPY')}")
         print(f"Scanned: {summary.total_scanned}  Processed: {len(results)}  "
               f"Unsupported: {len(summary.unsupported_files)}")
@@ -97,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         recursive=args.recursive,
         move=args.move,
+        extraction_backend=args.backend,
     )
 
     results, summary = run(options)

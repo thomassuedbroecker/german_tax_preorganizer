@@ -30,6 +30,7 @@ logging.getLogger("pypdf").setLevel(logging.ERROR)
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+EXTRACTION_BACKENDS = ("auto", "docling", "light")
 
 _MIN_USEFUL_CHARS = 20
 
@@ -173,18 +174,30 @@ def _extract_image_light(path: Path) -> ExtractionResult:
 
 # --- public API ----------------------------------------------------------
 
-def extract_document(path: Path) -> ExtractionResult:
+def extract_document(path: Path, backend: str = "auto") -> ExtractionResult:
     """Extract one document with a hybrid strategy.
 
     ``text`` = richest view (Docling markdown) for amount/metadata extraction.
     ``classification_text`` = a plain-text view for keyword classification:
     we prefer the light backend's plain text (it classifies best), and fall
     back to a flattened version of the rich text.
+
+    ``backend`` controls the primary extraction view:
+    ``auto``/``docling`` prefer Docling and fall back to light extraction;
+    ``light`` skips Docling and uses only pdfplumber/pypdf/Tesseract.
     """
     from .metadata_extraction import normalize_for_classification
 
     path = Path(path)
     is_image = path.suffix.lower() in IMAGE_EXTS
+    backend = backend.lower()
+    if backend not in EXTRACTION_BACKENDS:
+        raise ValueError(f"unsupported extraction backend: {backend}")
+
+    if backend == "light":
+        primary = _extract_image_light(path) if is_image else _extract_pdf_light(path)
+        primary.classification_text = primary.text
+        return primary
 
     # --- amount/metadata view: Docling preferred, else light ---
     primary: ExtractionResult | None = None
