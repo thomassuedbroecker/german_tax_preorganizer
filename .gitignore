@@ -232,3 +232,6 @@ invoice_summary.docx
 # Private, user-specific category overrides (may contain real vendor names).
 *.local.yaml
 *.local.yml
+
+# Session log — may contain real invoice filenames/vendors. Keep local only.
+prompts/interactions.md
