@@ -3,7 +3,9 @@
 [![Tests](https://github.com/thomassuedbroecker/german_tax_preorganizer/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/thomassuedbroecker/german_tax_preorganizer/actions/workflows/tests.yml)
 [![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue.svg)](LICENSE)
 
-_Note: This README was developed with the help of AI._
+_Note: This project and its documentation were developed with AI assistance
+(including Claude Code and OpenAI Codex) under human direction and review. See
+[CONTENT_PROVENANCE.md](CONTENT_PROVENANCE.md) for details._
 
 A **local-first** command-line tool that scans a folder of PDF and image
 invoices/receipts, extracts metadata, classifies each document into configurable

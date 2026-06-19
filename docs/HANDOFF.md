@@ -91,7 +91,13 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   passed with 11 direct dependencies/extras covered; workflow YAML parsed;
   compileall passed; pytest -> **43 passed**.
 - README test badge is pinned to the `main` branch and the top of README now
-  explicitly states that it was developed with AI assistance.
+  explicitly states that the project and documentation were developed with AI
+  assistance under human direction/review, with a link to provenance details.
+- CLI/UI smoke verification used a synthetic blank PDF only: pytest **43 passed**;
+  CLI light-backend dry run processed 1 file, produced report/audit outputs, and
+  routed it to manual review; offscreen PySide6 run processed the same file,
+  populated 1 table row, showed the expected summary, and enabled report/output
+  controls.
 
 ## ⚠️ Privacy rules — do not break
 
