@@ -106,6 +106,12 @@ Module fallback:
 If the shell reports `command not found`, activate `.venv` or use the explicit
 `.venv/bin/invoice-sorter-gui` command above.
 
+The GUI now starts its own local agent REST service automatically on startup.
+The Agent host and Agent port fields default to `127.0.0.1:8080`; the status
+label on the main run row reports whether the agent started successfully.
+Document Advice and Executive Report become available once a run has completed,
+and no separate agent server process needs to be launched.
+
 In the app:
 
 1. Pick input and output folders.
@@ -117,6 +123,12 @@ In the app:
 The progress bar shows how many documents have been inspected. Click **Stop** to
 cancel after the current document; partial report, audit, and performance logs
 are still written.
+
+**Category corrections**: After a run completes, you can edit categories directly in the table:
+- Double-click any cell in the **Category** column to change it (dropdown from `categories.yaml` or free text).
+- Click **Edit Category** to change the category of the currently selected row.
+- Click **Undo Last Change** to revert the most recent edit.
+- Click **Export Corrections** to save all category changes as `category_corrections.csv` for audit or re-import.
 
 ## 6. Improve Local Categories
 
