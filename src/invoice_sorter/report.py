@@ -54,7 +54,10 @@ def _cell(value) -> str:
 def build_report(
     results: list[DocumentResult],
     summary: RunSummary,
+    compact_table: bool = False,
 ) -> str:
+    """Build the Markdown report. ``compact_table`` drops the wide columns
+    (invoice no., VAT, net, notes) so the table fits on a PDF page."""
     manual_cat = summary.manual_review_category
     processed = [r for r in results if r.status != ProcessingStatus.FAILED]
     failed = [r for r in results if r.status == ProcessingStatus.FAILED]
@@ -125,24 +128,39 @@ def build_report(
     # 8. Full invoice table
     a("## 3. Full invoice table")
     a("")
-    a("| File Name | Category | Vendor | Invoice Date | Invoice Number | "
-      "Gross Amount | VAT | Net Amount | Currency | Confidence | Notes |")
-    a("|---|---|---|---|---|---|---|---|---|---|---|")
-    for r in results:
-        m = r.metadata
-        a("| " + " | ".join([
-            _cell(r.source_path.name),
-            _cell(r.category),
-            _cell(m.vendor),
-            _cell(m.invoice_date),
-            _cell(m.invoice_number),
-            _cell(m.gross_amount),
-            _cell(m.vat_amount),
-            _cell(m.net_amount),
-            _cell(m.currency),
-            f"{r.confidence:.2f}",
-            _cell("; ".join(r.notes)),
-        ]) + " |")
+    if compact_table:
+        a("| File Name | Category | Vendor | Invoice Date | Gross | Currency | Confidence |")
+        a("|---|---|---|---|---|---|---|")
+        for r in results:
+            m = r.metadata
+            a("| " + " | ".join([
+                _cell(r.source_path.name),
+                _cell(r.category),
+                _cell(m.vendor),
+                _cell(m.invoice_date),
+                _cell(m.gross_amount),
+                _cell(m.currency),
+                f"{r.confidence:.2f}",
+            ]) + " |")
+    else:
+        a("| File Name | Category | Vendor | Invoice Date | Invoice Number | "
+          "Gross Amount | VAT | Net Amount | Currency | Confidence | Notes |")
+        a("|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in results:
+            m = r.metadata
+            a("| " + " | ".join([
+                _cell(r.source_path.name),
+                _cell(r.category),
+                _cell(m.vendor),
+                _cell(m.invoice_date),
+                _cell(m.invoice_number),
+                _cell(m.gross_amount),
+                _cell(m.vat_amount),
+                _cell(m.net_amount),
+                _cell(m.currency),
+                f"{r.confidence:.2f}",
+                _cell("; ".join(r.notes)),
+            ]) + " |")
     a("")
 
     # 9. Manual review section

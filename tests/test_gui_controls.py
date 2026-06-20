@@ -10,8 +10,14 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QItemSelectionModel, Qt  # noqa: E402
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox  # noqa: E402
 
+from invoice_sorter.ai_review import (  # noqa: E402
+    DEFAULT_ADVICE_MODEL,
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_REPORT_MODEL,
+)
 from invoice_sorter.gui import MainWindow  # noqa: E402
 from invoice_sorter.models import DocumentResult, ProcessingStatus  # noqa: E402
 from invoice_sorter.report import RunSummary  # noqa: E402
@@ -28,6 +34,9 @@ def test_progress_displays_completed_and_total_documents(app):
 
     assert window.ai_prompt_edit.text().endswith("config/ai_review_prompt.txt")
     assert window.ai_temperature.value() == 0.2
+    assert window.advice_model_edit.text() == DEFAULT_ADVICE_MODEL
+    assert window.report_model_edit.text() == DEFAULT_REPORT_MODEL
+    assert window.chat_model_edit.text() == DEFAULT_CHAT_MODEL
 
     window._on_progress(3, 8)
 
@@ -98,4 +107,51 @@ def test_manual_review_rows_use_red_background_and_white_text(app):
     item = window.table.item(0, 0)
     assert item.background().color().getRgb()[:3] == (185, 28, 28)
     assert item.foreground().color().getRgb()[:3] == (255, 255, 255)
+    window.close()
+
+
+def test_batch_category_edit_tracks_results_after_sorting(app, monkeypatch):
+    window = MainWindow()
+    results = [
+        DocumentResult(source_path=Path("z.pdf"), category="Internet"),
+        DocumentResult(source_path=Path("a.pdf"), category="Arbeit"),
+        DocumentResult(source_path=Path("m.pdf"), category="Musik"),
+    ]
+    window._on_finished(results, RunSummary(total_scanned=3))
+    window.table.sortItems(0, Qt.AscendingOrder)
+
+    selection = window.table.selectionModel()
+    for row in (0, 2):
+        selection.select(
+            window.table.model().index(row, 0),
+            QItemSelectionModel.Select | QItemSelectionModel.Rows,
+        )
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *_args, **_kwargs: ("Steuern", True))
+
+    window._edit_category()
+
+    assert results[0].category == "Steuern"
+    assert results[1].category == "Steuern"
+    assert results[2].category == "Musik"
+    assert len(window._correction_log.changes) == 2
+    window.close()
+
+
+def test_undo_uses_stable_result_index_after_sorting(app, monkeypatch):
+    window = MainWindow()
+    results = [
+        DocumentResult(source_path=Path("z.pdf"), category="Internet"),
+        DocumentResult(source_path=Path("a.pdf"), category="Arbeit"),
+    ]
+    window._on_finished(results, RunSummary(total_scanned=2))
+    window.table.sortItems(0, Qt.AscendingOrder)
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *_args, **_kwargs: ("Steuern", True))
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args, **_kwargs: None)
+
+    window._edit_category_rows([0])
+    window.table.sortItems(0, Qt.DescendingOrder)
+    window._undo_last_change()
+
+    assert results[0].category == "Internet"
+    assert results[1].category == "Arbeit"
     window.close()

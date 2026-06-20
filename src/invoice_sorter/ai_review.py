@@ -8,6 +8,8 @@ invoice text is never included.
 from __future__ import annotations
 
 import json
+import os
+import re
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -19,8 +21,21 @@ from typing import Any
 from .models import UNKNOWN, DocumentResult, ProcessingStatus
 from .report import RunSummary
 
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
-DEFAULT_OLLAMA_MODEL = "llama3.2"
+DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+
+# Per-use-case default models. These are tuned for commonly-installed local
+# Ollama models and can each be overridden by an environment variable. Change
+# them freely to models you have (`ollama list`).
+#   general fallback + post-sort AI review: a reasoning model
+DEFAULT_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
+#   per-document advice: reasoning about whether manual review is needed
+DEFAULT_ADVICE_MODEL = os.environ.get("OLLAMA_ADVICE_MODEL", "deepseek-r1:8b")
+#   executive report: largest/most capable model for the high-stakes synthesis
+DEFAULT_REPORT_MODEL = os.environ.get("OLLAMA_REPORT_MODEL", "qwen3-coder:30b")
+#   interactive chat: a small, fast model for responsiveness
+DEFAULT_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "granite4:tiny-h")
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 DEFAULT_PROMPT_TEMPLATE = """You are reviewing the output of a local invoice sorting tool for a tax
 preparation workflow.
 
@@ -194,7 +209,9 @@ def generate_review(
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Ollama returned invalid JSON") from exc
-    text = str(data.get("response") or "").strip()
+    # Strip reasoning-model <think>...</think> blocks (e.g. deepseek-r1) so the
+    # review appended to the report is clean prose.
+    text = _THINK_RE.sub("", str(data.get("response") or "")).strip()
     if not text:
         raise RuntimeError("Ollama returned an empty response")
 

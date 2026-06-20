@@ -6,6 +6,7 @@ import json
 import urllib.request
 import urllib.error
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,39 @@ import pytest
 pytest.importorskip("langgraph")
 
 from invoice_sorter import agent_service
+
+
+def test_agent_functions_use_per_feature_default_models(monkeypatch):
+    models = []
+
+    class FakeAgent:
+        def invoke(self, _state):
+            return {"messages": [SimpleNamespace(content="OK")]}
+
+    def fake_create_agent(_prompt, _base_url, model, _temperature):
+        models.append(model)
+        return FakeAgent()
+
+    monkeypatch.setattr(agent_service, "_create_agent", fake_create_agent)
+
+    agent_service.run_document_advice({"file_name": "anonymous.pdf"})
+    agent_service.run_executive_report({"processed": 1})
+    agent_service.run_document_chat({"file_name": "anonymous.pdf"}, "Category?")
+
+    assert models == [
+        agent_service.DEFAULT_ADVICE_MODEL,
+        agent_service.DEFAULT_REPORT_MODEL,
+        agent_service.DEFAULT_CHAT_MODEL,
+    ]
+
+
+def test_clean_model_output_strips_think_and_extracts_json():
+    from invoice_sorter.agent_service import _clean_model_output
+
+    assert _clean_model_output("<think>reasoning here</think>Hello there") == "Hello there"
+    blob = '{"file_name": "x.pdf", "tax_preparer_advice": "Please verify the vendor."}'
+    assert _clean_model_output(blob) == "Please verify the vendor."
+    assert _clean_model_output("Just plain prose.") == "Just plain prose."
 
 
 def start_handle():

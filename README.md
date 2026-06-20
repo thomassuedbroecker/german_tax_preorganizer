@@ -124,7 +124,7 @@ Options:
 | `--recursive` / `--no-recursive` | Scan subfolders (default: on) |
 | `--move` | Move instead of copy (default: copy — safer) |
 | `--ai-review` | Append an optional local Ollama sorting review to `invoice_summary.md` |
-| `--ai-model` | Ollama model for `--ai-review` (default: `OLLAMA_MODEL` or `llama3.2`) |
+| `--ai-model` | Ollama model for `--ai-review` (default: `$OLLAMA_MODEL` or `deepseek-r1:8b`) |
 | `--ai-base-url` | Ollama URL for `--ai-review` (default: `http://127.0.0.1:11434`) |
 | `--ai-prompt` | Custom AI review prompt template file; `{json_data}` inserts the inspection payload |
 | `--ai-temperature` | Ollama sampling temperature from `0.0` to `2.0` (default: `0.2`) |
@@ -172,12 +172,26 @@ Corrections). Requires the `[agent]` extra and a local Ollama server for chat;
 editing works without them. The non-GUI edit logic lives in
 [corrections.py](src/invoice_sorter/corrections.py) (`apply_document_edits`).
 
+To correct several documents at once, select multiple table rows and click
+**Edit Category**. The chosen category is applied to every selected document;
+edits and undo remain attached to the correct documents after table sorting.
+
 **Models are per-feature.** The **AI review model** field drives the post-sort
 review, and a separate **Agent models** row lets you pick a different Ollama
-model for **Advice**, **Exec Report**, and **Chat** independently. All default to
-`llama3.2`; set them to a model you have installed (e.g. `ollama pull llama3.2`,
-or pick an existing one). If a model is missing you get a clear "pull it or
-choose another" message instead of an opaque error.
+model for **Advice**, **Exec Report**, and **Chat** independently. Sensible
+per-use-case defaults are used (and each is overridable by an env var):
+
+| Use case | Default model | Env override |
+|---|---|---|
+| AI review + general fallback | `deepseek-r1:8b` | `OLLAMA_MODEL` |
+| Document Advice | `deepseek-r1:8b` | `OLLAMA_ADVICE_MODEL` |
+| Executive Report | `qwen3-coder:30b` | `OLLAMA_REPORT_MODEL` |
+| Chat | `granite4:tiny-h` | `OLLAMA_CHAT_MODEL` |
+
+Set them to models you have installed (`ollama list`). If a model is missing you
+get a clear "pull it or choose another" message instead of an opaque error.
+Reasoning-model `<think>` blocks and JSON-wrapped replies are cleaned
+automatically.
 
 **Generate Exec PDF** renders the Markdown report into a formatted PDF (headings,
 tables, bold) via `QTextDocument.setMarkdown` — it no longer dumps raw Markdown.
@@ -203,7 +217,7 @@ invoice-sorter \
   --backend auto \
   --dry-run \
   --ai-review \
-  --ai-model llama3.2 \
+  --ai-model deepseek-r1:8b \
   --ai-temperature 0.2
 ```
 
@@ -239,7 +253,7 @@ invoice-sorter \
   --output "/path/to/output/folder" \
   --dry-run \
   --ai-review \
-  --ai-model llama3.2 \
+  --ai-model deepseek-r1:8b \
   --ai-temperature 0.2 \
   --ai-prompt config/ai_review_prompt.local.txt
 ```

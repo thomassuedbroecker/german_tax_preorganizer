@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ai-model",
         default=os.environ.get("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
-        help="Ollama model for --ai-review (default: OLLAMA_MODEL or llama3.2)",
+        help="Ollama model for --ai-review (default: $OLLAMA_MODEL or deepseek-r1:8b)",
     )
     parser.add_argument(
         "--ai-base-url",

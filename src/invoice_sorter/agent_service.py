@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -16,7 +17,13 @@ from langchain_core.messages.human import HumanMessage
 from langchain_core.messages.system import SystemMessage
 from pydantic import PrivateAttr
 
-from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
+from .ai_review import (
+    DEFAULT_ADVICE_MODEL,
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_REPORT_MODEL,
+)
 from .models import DocumentResult, ProcessingStatus
 from .report import RunSummary
 
@@ -157,7 +164,9 @@ def _build_document_advice_prompt(document: dict[str, Any]) -> str:
         "You are a local invoice sorting assistant. Use only the JSON data below. "
         "Do not invent vendor names, dates, amounts, or file contents. "
         "Review the document metadata, category, confidence, and notes, and "
-        "provide concise advice for a tax preparer on whether manual review is needed." 
+        "provide concise advice for a tax preparer on whether manual review is needed. "
+        "Respond in plain prose for a person to read. Do NOT output JSON, do NOT "
+        "repeat the input fields, and do NOT wrap your answer in code fences."
         "\n\n"
         "Document JSON:\n"
         f"{json.dumps(document, ensure_ascii=False, indent=2)}\n"
@@ -223,6 +232,33 @@ def _summary_to_payload(summary: RunSummary, results: list[DocumentResult]) -> d
     }
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_JSON_TEXT_KEYS = (
+    "tax_preparer_advice", "advice", "reply", "answer", "response", "summary", "report",
+)
+
+
+def _clean_model_output(text: str) -> str:
+    """Make raw model output presentable to a human.
+
+    Strips reasoning-model ``<think>...</think>`` blocks, and if the model
+    returned a JSON object (some models do), extracts the human-readable field
+    instead of showing the raw JSON.
+    """
+    text = _THINK_RE.sub("", text or "").strip()
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            obj = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return text
+        if isinstance(obj, dict):
+            for key in _JSON_TEXT_KEYS:
+                value = obj.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return text
+
+
 def _create_agent(prompt: str, base_url: str, model: str, temperature: float) -> Any:
     llm = OllamaAgentModel(
         model_name=model,
@@ -235,25 +271,27 @@ def _create_agent(prompt: str, base_url: str, model: str, temperature: float) ->
 def run_document_advice(
     document: dict[str, Any],
     base_url: str = DEFAULT_OLLAMA_URL,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str | None = None,
     temperature: float = 0.2,
 ) -> str:
+    model = model or DEFAULT_ADVICE_MODEL
     prompt = _build_document_advice_prompt(document)
     agent = _create_agent(prompt, base_url, model, temperature)
     state = agent.invoke({"messages": [HumanMessage(content="Please review the document.")], "remaining_steps": 5})
-    return state["messages"][-1].content
+    return _clean_model_output(state["messages"][-1].content)
 
 
 def run_executive_report(
     summary: dict[str, Any],
     base_url: str = DEFAULT_OLLAMA_URL,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str | None = None,
     temperature: float = 0.2,
 ) -> str:
+    model = model or DEFAULT_REPORT_MODEL
     prompt = _build_executive_report_prompt(summary)
     agent = _create_agent(prompt, base_url, model, temperature)
     state = agent.invoke({"messages": [HumanMessage(content="Please write the report.")], "remaining_steps": 5})
-    return state["messages"][-1].content
+    return _clean_model_output(state["messages"][-1].content)
 
 
 def _build_document_chat_prompt(
@@ -266,8 +304,11 @@ def _build_document_chat_prompt(
         "You are a local invoice sorting assistant chatting with a tax preparer "
         "about ONE document. Use only the JSON data below; do not invent vendor "
         "names, dates, amounts, or file contents. " + cat_line +
-        "When asked, suggest the single best category from the allowed list and "
-        "explain briefly. Keep answers concise."
+        "Answer the user's actual question directly and specifically. Do NOT just "
+        "restate the current category. When asked which category fits, pick the "
+        "single best one from the allowed list and explain briefly using the "
+        "document's vendor/notes. Reply in plain prose; do NOT output JSON. Keep "
+        "answers concise."
         "\n\n"
         "Document JSON:\n"
         f"{json.dumps(document, ensure_ascii=False, indent=2)}\n"
@@ -279,12 +320,13 @@ def run_document_chat(
     message: str,
     history: list[dict[str, str]] | None = None,
     base_url: str = DEFAULT_OLLAMA_URL,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str | None = None,
     temperature: float = 0.2,
     categories: list[str] | None = None,
 ) -> str:
     """Answer a chat turn about a single document. History is a list of
     ``{"role": "user"|"assistant", "content": str}`` dicts."""
+    model = model or DEFAULT_CHAT_MODEL
     prompt = _build_document_chat_prompt(document, categories)
     agent = _create_agent(prompt, base_url, model, temperature)
     messages: list[Any] = []
@@ -296,7 +338,7 @@ def run_document_chat(
             messages.append(HumanMessage(content=content))
     messages.append(HumanMessage(content=message))
     state = agent.invoke({"messages": messages, "remaining_steps": 5})
-    return state["messages"][-1].content
+    return _clean_model_output(state["messages"][-1].content)
 
 
 class AgentRequestHandler(BaseHTTPRequestHandler):
@@ -345,7 +387,7 @@ class AgentRequestHandler(BaseHTTPRequestHandler):
                 advice = run_document_advice(
                     document,
                     base_url=payload.get("base_url") or DEFAULT_OLLAMA_URL,
-                    model=payload.get("model") or DEFAULT_OLLAMA_MODEL,
+                    model=payload.get("model"),
                     temperature=float(payload.get("temperature", 0.2)),
                 )
                 self._send_json({"advice": advice})
@@ -361,7 +403,7 @@ class AgentRequestHandler(BaseHTTPRequestHandler):
                     message,
                     history=payload.get("history"),
                     base_url=payload.get("base_url") or DEFAULT_OLLAMA_URL,
-                    model=payload.get("model") or DEFAULT_OLLAMA_MODEL,
+                    model=payload.get("model"),
                     temperature=float(payload.get("temperature", 0.2)),
                     categories=payload.get("categories"),
                 )
@@ -373,7 +415,7 @@ class AgentRequestHandler(BaseHTTPRequestHandler):
                 report_text = run_executive_report(
                     summary,
                     base_url=payload.get("base_url") or DEFAULT_OLLAMA_URL,
-                    model=payload.get("model") or DEFAULT_OLLAMA_MODEL,
+                    model=payload.get("model"),
                     temperature=float(payload.get("temperature", 0.2)),
                 )
                 # stream the report in small chunks as ndjson
@@ -386,7 +428,7 @@ class AgentRequestHandler(BaseHTTPRequestHandler):
                 report_text = run_executive_report(
                     summary,
                     base_url=payload.get("base_url") or DEFAULT_OLLAMA_URL,
-                    model=payload.get("model") or DEFAULT_OLLAMA_MODEL,
+                    model=payload.get("model"),
                     temperature=float(payload.get("temperature", 0.2)),
                 )
                 self._send_json({"report": report_text})

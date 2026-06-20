@@ -126,7 +126,7 @@ are still written.
 
 **Category corrections**: After a run completes, you can edit categories directly in the table:
 - Double-click any cell in the **Category** column to change it (dropdown from `categories.yaml` or free text).
-- Click **Edit Category** to change the category of the currently selected row.
+- Select one or more rows and click **Edit Category** to apply one category to all of them.
 - Click **Undo Last Change** to revert the most recent edit.
 - Click **Export Corrections** to save all category changes as `category_corrections.csv` for audit or re-import.
 
@@ -167,7 +167,7 @@ invoice-sorter \
   --backend auto \
   --dry-run \
   --ai-review \
-  --ai-model llama3.2 \
+  --ai-model deepseek-r1:8b \
   --ai-temperature 0.2
 ```
 

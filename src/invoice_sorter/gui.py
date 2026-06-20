@@ -16,11 +16,19 @@ from threading import Event
 from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QTextDocument, QTextCursor
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QFont,
+    QPageLayout,
+    QTextDocument,
+    QTextCursor,
+)
 from PySide6.QtPrintSupport import QPrinter
 import csv
 import time
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -46,7 +54,13 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
 )
 
-from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
+from .ai_review import (
+    DEFAULT_ADVICE_MODEL,
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_REPORT_MODEL,
+)
 from .agent_client import (
     AgentClientOptions,
     request_document_advice,
@@ -67,6 +81,7 @@ _DEFAULT_AI_PROMPT = Path(__file__).resolve().parents[2] / "config" / "ai_review
 
 _COLUMNS = ["File", "Category", "Vendor", "Invoice Date", "Gross", "Currency",
             "Confidence", "Status", "Notes"]
+_RESULT_INDEX_ROLE = Qt.UserRole + 1
 
 
 def _cell(value) -> str:
@@ -91,10 +106,12 @@ class CorrectionLog:
     """Track category changes for undo and export."""
 
     def __init__(self) -> None:
-        self.changes: list[tuple[int, str, str]] = []  # (row, old_category, new_category)
+        # The first value is the stable index in ``_last_results``, not the
+        # current visible table row (which changes whenever the user sorts).
+        self.changes: list[tuple[int, str, str]] = []
 
-    def add_change(self, row: int, old_cat: str, new_cat: str) -> None:
-        self.changes.append((row, old_cat, new_cat))
+    def add_change(self, result_index: int, old_cat: str, new_cat: str) -> None:
+        self.changes.append((result_index, old_cat, new_cat))
 
     def undo_last(self) -> tuple[int, str, str] | None:
         return self.changes.pop() if self.changes else None
@@ -252,9 +269,9 @@ class MainWindow(QMainWindow):
         root.addLayout(form)
 
         # Per-feature agent models (each can use a different Ollama model).
-        self.advice_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
-        self.report_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
-        self.chat_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
+        self.advice_model_edit = QLineEdit(DEFAULT_ADVICE_MODEL)
+        self.report_model_edit = QLineEdit(DEFAULT_REPORT_MODEL)
+        self.chat_model_edit = QLineEdit(DEFAULT_CHAT_MODEL)
         agent_models_row = QHBoxLayout()
         agent_models_row.addWidget(QLabel("Agent models —  Advice:"))
         agent_models_row.addWidget(self.advice_model_edit)
@@ -354,6 +371,8 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setSortingEnabled(True)
         self.table.cellDoubleClicked.connect(self._open_selected_file)
         root.addWidget(self.table, 1)
@@ -400,8 +419,9 @@ class MainWindow(QMainWindow):
             self._agent_handle = start_agent_server(host=host, port=port)
             self.agent_status_label.setText(f"Agent server: http://{host}:{port}")
         except OSError as exc:
-            self.agent_status_label.setText("Agent server: failed to start")
-            QMessageBox.critical(self, "Agent startup failed", str(exc))
+            # Do NOT show a modal here: a modal on startup blocks headless/test
+            # runs forever (no one to click OK) and is poor UX. Report inline.
+            self.agent_status_label.setText(f"Agent server: not started ({exc})")
             self._agent_handle = None
 
     def _stop_agent_server(self) -> None:
@@ -580,6 +600,7 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(val)
                 if col == 0:
                     item.setData(Qt.UserRole, str(r.source_path))
+                    item.setData(_RESULT_INDEX_ROLE, row)
                 if is_failed:
                     item.setBackground(QColor(255, 224, 224))
                 elif is_manual:
@@ -607,7 +628,7 @@ class MainWindow(QMainWindow):
         try:
             from .report import build_report
 
-            md = build_report(self._last_results, self._last_summary)
+            md = build_report(self._last_results, self._last_summary, compact_table=True)
             render_markdown_to_pdf(md, path)
             QMessageBox.information(self, "PDF saved", f"Executive PDF written to {path}")
         except Exception as exc:
@@ -626,50 +647,7 @@ class MainWindow(QMainWindow):
     def _open_selected_file(self, row: int, column: int) -> None:
         # If user double-clicked the Category column, allow editing the category.
         if column == 1:
-            if not getattr(self, "_last_results", None):
-                return
-            try:
-                cfg = load_config(self.config_edit.text().strip() or str(_DEFAULT_CONFIG))
-                categories = cfg.category_names()
-            except Exception:
-                categories = []
-
-            current_item = self.table.item(row, 1)
-            current = current_item.text() if current_item is not None else ""
-            if categories:
-                # present a choice list
-                choice, ok = QInputDialog.getItem(self, "Select category", "Category:", categories, current.index(current) if current in categories else 0, False)
-                if ok and choice and choice != current:
-                    # track change in correction log
-                    self._correction_log.add_change(row, current, choice)
-                    self.undo_btn.setEnabled(True)
-                    # update table and underlying results if present
-                    if current_item is None:
-                        current_item = QTableWidgetItem(choice)
-                        self.table.setItem(row, 1, current_item)
-                    else:
-                        current_item.setText(choice)
-                    if getattr(self, "_last_results", None) and row < len(self._last_results):
-                        try:
-                            self._last_results[row].category = choice
-                        except Exception:
-                            pass
-            else:
-                text, ok = QInputDialog.getText(self, "Edit category", "Category:", text=current)
-                if ok and text and text != current:
-                    # track change in correction log
-                    self._correction_log.add_change(row, current, text)
-                    self.undo_btn.setEnabled(True)
-                    if current_item is None:
-                        current_item = QTableWidgetItem(text)
-                        self.table.setItem(row, 1, current_item)
-                    else:
-                        current_item.setText(text)
-                    if getattr(self, "_last_results", None) and row < len(self._last_results):
-                        try:
-                            self._last_results[row].category = text
-                        except Exception:
-                            pass
+            self._edit_category_rows([row])
             return
 
         # otherwise open the source file for other columns (default behavior)
@@ -682,17 +660,88 @@ class MainWindow(QMainWindow):
         if not source_path:
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(source_path)))
+    def _result_index_for_row(self, row: int) -> int | None:
+        item = self.table.item(row, 0)
+        if item is None:
+            return None
+        value = item.data(_RESULT_INDEX_ROLE)
+        return int(value) if value is not None else None
+
+    def _table_row_for_result(self, result_index: int) -> int | None:
+        for row in range(self.table.rowCount()):
+            if self._result_index_for_row(row) == result_index:
+                return row
+        return None
+
+    def _edit_category_rows(self, rows: list[int]) -> None:
+        if not rows:
+            return
+        try:
+            cfg = load_config(self.config_edit.text().strip() or str(_DEFAULT_CONFIG))
+            categories = cfg.category_names()
+        except Exception:
+            categories = []
+
+        current_values = {
+            self.table.item(row, 1).text()
+            for row in rows
+            if self.table.item(row, 1) is not None
+        }
+        current = next(iter(current_values)) if len(current_values) == 1 else ""
+        if categories:
+            current_index = categories.index(current) if current in categories else 0
+            choice, ok = QInputDialog.getItem(
+                self,
+                "Select category",
+                f"Category for {len(rows)} selected document(s):",
+                categories,
+                current_index,
+                False,
+            )
+        else:
+            choice, ok = QInputDialog.getText(
+                self,
+                "Edit category",
+                f"Category for {len(rows)} selected document(s):",
+                text=current,
+            )
+        if not ok or not choice:
+            return
+
+        changed = False
+        sorting_enabled = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+        try:
+            for row in rows:
+                item = self.table.item(row, 1)
+                old_category = item.text() if item is not None else ""
+                result_index = self._result_index_for_row(row)
+                if old_category == choice or result_index is None:
+                    continue
+                self._correction_log.add_change(result_index, old_category, choice)
+                if item is None:
+                    item = QTableWidgetItem(choice)
+                    self.table.setItem(row, 1, item)
+                else:
+                    item.setText(choice)
+                if result_index < len(self._last_results):
+                    self._last_results[result_index].category = choice
+                changed = True
+        finally:
+            self.table.setSortingEnabled(sorting_enabled)
+        if changed:
+            self.undo_btn.setEnabled(True)
+
     def _edit_category(self) -> None:
-        """Bulk edit categories: select a row and choose a new category."""
+        """Apply one category to all selected document rows."""
         if not getattr(self, "_last_results", None):
             QMessageBox.warning(self, "No data", "Run the sorter first to edit categories.")
             return
-        row = self.table.currentRow()
-        if row < 0:
-            QMessageBox.warning(self, "Select row", "Select one row first.")
+        rows = sorted({index.row() for index in self.table.selectedIndexes()})
+        if not rows:
+            QMessageBox.warning(self, "Select rows", "Select one or more rows first.")
             return
-        # trigger double-click handling on the category column
-        self._open_selected_file(row, 1)
+        self._edit_category_rows(rows)
 
     def _undo_last_change(self) -> None:
         """Undo the last category change."""
@@ -700,15 +749,16 @@ class MainWindow(QMainWindow):
         if not undo_result:
             QMessageBox.information(self, "Undo", "No changes to undo.")
             return
-        row, old_cat, new_cat = undo_result
+        result_index, old_cat, new_cat = undo_result
+        row = self._table_row_for_result(result_index)
+        if row is None:
+            QMessageBox.warning(self, "Undo", "The edited document is no longer in the table.")
+            return
         current_item = self.table.item(row, 1)
         if current_item is not None:
             current_item.setText(old_cat)
-        if getattr(self, "_last_results", None) and row < len(self._last_results):
-            try:
-                self._last_results[row].category = old_cat
-            except Exception:
-                pass
+        if getattr(self, "_last_results", None) and result_index < len(self._last_results):
+            self._last_results[result_index].category = old_cat
         if not self._correction_log.changes:
             self.undo_btn.setEnabled(False)
         QMessageBox.information(self, "Undo", f"Reverted row {row}: {new_cat} → {old_cat}")
@@ -811,10 +861,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No data", "Run the sorter first.")
             return
         row = self.table.currentRow()
-        if row < 0 or row >= len(self._last_results):
+        result_index = self._result_index_for_row(row) if row >= 0 else None
+        if result_index is None or result_index >= len(self._last_results):
             QMessageBox.warning(self, "Select row", "Select one document row first.")
             return
-        result = self._last_results[row]
+        result = self._last_results[result_index]
 
         try:
             cfg = load_config(self.config_edit.text().strip() or str(_DEFAULT_CONFIG))
@@ -921,7 +972,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(dialog, "No changes", "Nothing to apply.")
                 return
             if result.category != old_category:
-                self._correction_log.add_change(row, old_category, result.category)
+                self._correction_log.add_change(result_index, old_category, result.category)
                 self.undo_btn.setEnabled(True)
             self._set_row_from_result(row, result)
             QMessageBox.information(dialog, "Applied", "Updated:\n- " + "\n- ".join(changes))
@@ -965,7 +1016,20 @@ class MainWindow(QMainWindow):
             worker = ExecReportWorker(summary_payload, options=options)
             self._exec_worker = worker
             worker.chunk_received.connect(lambda s: exec_text.insertPlainText(s))
-            worker.finished.connect(lambda: QMessageBox.information(self, "Exec Report", "Report complete"))
+
+            def _on_exec_done() -> None:
+                saved = ""
+                if self._last_output:
+                    try:
+                        out_path = Path(self._last_output) / "executive_report.md"
+                        out_path.write_text(exec_text.toPlainText(), encoding="utf-8")
+                        saved = str(out_path)
+                    except Exception:
+                        saved = ""
+                msg = f"Report complete.\nSaved to: {saved}" if saved else "Report complete."
+                QMessageBox.information(self, "Exec Report", msg)
+
+            worker.finished.connect(_on_exec_done)
 
             def _on_error(err: str) -> None:
                 dialog.close()
@@ -1002,17 +1066,24 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export failed", str(exc))
 
 
-def render_markdown_to_pdf(markdown_text: str, path: str) -> None:
+def render_markdown_to_pdf(markdown_text: str, path: str, landscape: bool = True) -> None:
     """Render Markdown to a formatted PDF (headings, tables, bold).
 
     Uses ``QTextDocument.setMarkdown`` so the PDF contains rendered content, not
-    the raw Markdown source. Kept module-level so it is unit-testable.
+    the raw Markdown source. Renders landscape with a small font so wide tables
+    fit instead of wrapping into vertical character-soup. Module-level so it is
+    unit-testable.
     """
-    doc = QTextDocument()
-    doc.setMarkdown(markdown_text)
     printer = QPrinter(QPrinter.HighResolution)
     printer.setOutputFormat(QPrinter.PdfFormat)
     printer.setOutputFileName(path)
+    if landscape:
+        printer.setPageOrientation(QPageLayout.Orientation.Landscape)
+    doc = QTextDocument()
+    doc.setDefaultFont(QFont("Helvetica", 8))
+    doc.setMarkdown(markdown_text)
+    # Lay the document out to the printable page width so tables size correctly.
+    doc.setPageSize(printer.pageRect(QPrinter.Unit.Point).size())
     doc.print_(printer)
 
 

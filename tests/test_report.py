@@ -56,6 +56,23 @@ def test_report_contains_all_sections():
     assert "Unknown" in md
 
 
+def test_compact_table_drops_wide_columns():
+    results = _sample_results()
+    summary = RunSummary(total_scanned=3)
+    full = build_report(results, summary)
+    compact = build_report(results, summary, compact_table=True)
+    # Full table keeps the wide columns...
+    assert "Net Amount" in full
+    assert "Invoice Number" in full
+    assert "Notes |" in full
+    # ...the compact table (for PDF) drops them but keeps key columns.
+    assert "Net Amount" not in compact
+    assert "Invoice Number" not in compact
+    assert "Gross" in compact
+    assert "Confidence" in compact
+    assert "Telekom" in compact
+
+
 def test_dry_run_banner():
     summary = RunSummary(total_scanned=0, dry_run=True)
     md = build_report([], summary)

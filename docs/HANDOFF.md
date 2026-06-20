@@ -22,9 +22,8 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **64 pytest passing** locally (CI on `.[test]`: 52 passed, 5 skipped — GUI/agent
-  tests skip without PySide6/langgraph). Added corrections, document-chat, and PDF
-  render tests.
+- ✅ **70 pytest passing** locally; CI on `.[test]` skips GUI/agent/PDF tests
+  without PySide6/langgraph/pypdf; pure tests run.
 - ✅ **PDF export renders Markdown** (`render_markdown_to_pdf` in `gui.py` uses
   `QTextDocument.setMarkdown`) — fixed the bug where the PDF contained raw Markdown.
 - ✅ **Document chat + edit:** select a row → "Chat / Edit" to chat with the local
@@ -45,10 +44,54 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ **Category Editing (NEW):** Double-click Category column or use "Edit Category" button
   to change. "Undo Last Change" reverts edits. "Export Corrections" saves as CSV for audit.
   Changes tracked in in-memory `CorrectionLog`.
+- ✅ **Per-use-case Ollama defaults:** AI review and document advice use
+  `deepseek-r1:8b`, executive reports use `qwen3-coder:30b`, and chat uses
+  `granite4:tiny-h`. Each is installed locally and independently overridable by
+  `OLLAMA_MODEL`, `OLLAMA_ADVICE_MODEL`, `OLLAMA_REPORT_MODEL`, or
+  `OLLAMA_CHAT_MODEL`; no runtime default uses `llama3.2`.
+- ✅ **Batch category editing:** Multi-select table rows and click "Edit Category"
+  to apply one category to all. Edits, chat/edit, and undo use stable result
+  indices so sorting the table cannot update the wrong document.
 - ✅ **GUI Enhancements:** Progress shows elapsed/ETA/percent; Export CSV/PDF buttons;
   double-click source file to open; confidence-based row coloring.
 
 ## Live update log
+
+### 2026-06-20 model defaults + batch category editing (Codex continuation)
+
+- Verified the model defaults against `ollama list`: `deepseek-r1:8b` for AI
+  review/advice, `qwen3-coder:30b` for executive synthesis, and
+  `granite4:tiny-h` for responsive chat. Added a test proving agent functions
+  route to their per-feature defaults.
+- Replaced the last user-facing `llama3.2` command in `docs/QUICK_START.md`.
+  Remaining occurrences are historical handoff text or isolated test fixtures,
+  not runtime defaults.
+- Completed batch category editing and fixed the pre-existing sorted-table row
+  mapping bug for category edits, undo, and Chat/Edit.
+- Updated README and Quick Start behavior descriptions.
+- Verification: `.venv/bin/python -m pytest -q` → **70 passed**.
+
+### 2026-06-20 UI test fixes (Opus session)
+
+From a manual UI test, fixed:
+- **PDF "bad outline":** the 11-column invoice table overflowed the page (every
+  cell wrapped into vertical character-soup, ~31 pages). PDF now uses a compact
+  7-column table (`build_report(..., compact_table=True)`) rendered **landscape at
+  8pt** via `render_markdown_to_pdf` → ~2 pages, readable. Full Markdown report
+  keeps all columns.
+- **Document Advice dumped raw JSON:** `agent_service._clean_model_output` now
+  strips `<think>...</think>` and, if a model returns a JSON object, extracts the
+  human field (e.g. `tax_preparer_advice`). Applied to advice/report/chat. Advice
+  and chat prompts now demand plain prose, no JSON.
+- **Chat parroted the category:** chat prompt now says "answer the question, don't
+  restate the category". Main lever is model size — `granite4:350m-h` is too small;
+  use a larger chat model.
+- **Exec report "where saved":** the streaming Agent Exec Report is now saved to
+  `<output>/executive_report.md` and the dialog shows the path.
+- **Suite hang (critical):** `_start_agent_server` popped `QMessageBox.critical`
+  on port-in-use — a modal that blocks headless/test runs forever. Replaced with a
+  non-blocking status-label update. This was hanging `pytest`.
+- Tests added: `_clean_model_output`, compact-table. **67 passed.**
 
 ### 2026-06-20 PDF render fix + document chat/edit (Opus session)
 
@@ -287,7 +330,7 @@ backend).
 2. ✅ Done: GUI backend selector (Auto/Docling/Light).
 3. ✅ Done: Streaming agent endpoints + GUI consumer + CI workflow.
 4. ✅ Done: Category editing, undo, and corrections export.
-5. **Batch category edits:** Select multiple rows, apply category to all.
+5. ✅ Done: batch category edits with sorting-safe result mapping.
 6. **Persist corrections:** Option to re-run with user-edited categories or save
    edits back to audit log.
 7. **DOCX export** (`[docx]` extra, `python-docx`) mirroring `report.py`.
@@ -296,9 +339,15 @@ backend).
 10. **Streaming response improvements:** Add progress/status messages in chunks
     (e.g., "Processing...", "Complete").
 
-## All work committed
+## Worktree / continuation status
 
-Final commits on `main` (after merging `ci/add-github-actions`):
+The changes described in the 2026-06-20 UI fixes and Codex continuation entries
+are currently **uncommitted** on `main`. Preserve the existing worktree and
+review the full diff before committing. The next implementation target is
+persisting corrections into regenerated report/audit output or a clearly defined
+re-import format.
+
+Earlier committed work on `main` (after merging `ci/add-github-actions`):
 
 ```
 dccfcbc docs: add category editing features to QUICK_START
@@ -318,4 +367,4 @@ Key files changed/added:
 - Modified: `docs/HANDOFF.md` (this file).
 - Modified: `CONTENT_PROVENANCE.md` (updated AI integration notes).
 
-Repo is on `main`. All 55 tests passing. Ready for further development.
+Repo is on `main`. Current local verification: **70 tests passed**.
