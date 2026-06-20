@@ -25,7 +25,8 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ **70 pytest passing** locally; CI on `.[test]` skips GUI/agent/PDF tests
   without PySide6/langgraph/pypdf; pure tests run.
 - ✅ **PDF export renders Markdown** (`render_markdown_to_pdf` in `gui.py` uses
-  `QTextDocument.setMarkdown`) — fixed the bug where the PDF contained raw Markdown.
+  `QTextDocument.setMarkdown`). Model-generated AI reviews are normalized to
+  remove an outer Markdown code fence before report/PDF rendering.
 - ✅ **Document chat + edit:** select a row → "Chat / Edit" to chat with the local
   agent about one document and edit its category/metadata. Endpoint
   `/api/document-chat` + `run_document_chat`; client `request_document_chat`;
@@ -56,6 +57,21 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   double-click source file to open; confidence-based row coloring.
 
 ## Live update log
+
+### 2026-06-20 fenced AI Markdown PDF fix (Codex continuation)
+
+- Diagnosed the reported `invoice_summary_exec.pdf`: only the local AI review
+  showed raw headings, list markers, and bold syntax because the model enclosed
+  its entire response in a Markdown code fence.
+- Added `normalize_markdown_fragment` at both AI-response ingestion and report
+  construction, so existing/injected fenced reviews and new model responses are
+  both handled safely. The default and configurable prompt now explicitly forbid
+  an outer code fence.
+- Strengthened report, AI-review, and real PDF-render regression coverage.
+- Regenerated the local executive PDF with a compact table: **5 pages**, with no
+  raw AI Markdown markers detected by PDF text extraction.
+- Verification: `.venv/bin/python -m pytest -q` → **70 passed**; compileall and
+  `git diff --check` passed.
 
 ### 2026-06-20 model defaults + batch category editing (Codex continuation)
 

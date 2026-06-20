@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import UNKNOWN, DocumentResult, ProcessingStatus
-from .report import RunSummary
+from .report import RunSummary, normalize_markdown_fragment
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 
@@ -51,6 +51,7 @@ Write a concise Markdown review with these sections:
 5. Cautions for the tax advisor
 
 Keep it practical and specific to the counts and confidence signals.
+Return the Markdown directly. Do not wrap the response in a Markdown code fence.
 
 JSON data:
 {json_data}
@@ -211,7 +212,9 @@ def generate_review(
         raise RuntimeError("Ollama returned invalid JSON") from exc
     # Strip reasoning-model <think>...</think> blocks (e.g. deepseek-r1) so the
     # review appended to the report is clean prose.
-    text = _THINK_RE.sub("", str(data.get("response") or "")).strip()
+    text = normalize_markdown_fragment(
+        _THINK_RE.sub("", str(data.get("response") or ""))
+    )
     if not text:
         raise RuntimeError("Ollama returned an empty response")
 

@@ -69,7 +69,7 @@ def test_generate_review_parses_ollama_response(monkeypatch):
 
         def read(self):
             return (
-                b'{"model":"llama3.2","response":"## Overall result\\nLooks consistent.",'
+                b'{"model":"llama3.2","response":"```markdown\\n## Overall result\\nLooks consistent.\\n```",'
                 b'"total_duration":2500000000,"load_duration":500000000,'
                 b'"prompt_eval_count":120,"prompt_eval_duration":600000000,'
                 b'"eval_count":40,"eval_duration":1400000000}'
@@ -91,6 +91,7 @@ def test_generate_review_parses_ollama_response(monkeypatch):
     )
 
     assert "Looks consistent." in result.text
+    assert "```" not in result.text
     assert result.metrics["inference_duration_seconds"] == 1.4
     assert result.metrics["prompt_tokens"] == 120
     assert result.metrics["output_tokens"] == 40

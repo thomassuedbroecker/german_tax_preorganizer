@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+import re
 from typing import Any
 
 from .models import UNKNOWN, DocumentResult, ProcessingStatus
@@ -21,6 +22,18 @@ _CONFIDENCE_GUIDE = (
     "| 0.50 – 0.69 | Needs review |\n"
     "| below 0.50 | Unclear / manual review |\n"
 )
+
+_MARKDOWN_FENCE_RE = re.compile(
+    r"\A```(?:markdown|md)?[ \t]*\r?\n(?P<body>.*)\r?\n```[ \t]*\Z",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def normalize_markdown_fragment(text: str) -> str:
+    """Remove one outer code fence from model-generated Markdown."""
+    cleaned = (text or "").strip()
+    match = _MARKDOWN_FENCE_RE.fullmatch(cleaned)
+    return match.group("body").strip() if match else cleaned
 
 
 @dataclass
@@ -110,7 +123,7 @@ def build_report(
         a("## 2b. Local AI sorting review")
         a("")
         if summary.ai_review:
-            a(summary.ai_review.strip())
+            a(normalize_markdown_fragment(summary.ai_review))
             metrics = summary.ai_review_metrics or {}
             if metrics:
                 a("")
