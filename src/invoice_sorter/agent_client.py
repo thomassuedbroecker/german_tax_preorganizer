@@ -51,6 +51,29 @@ def request_document_advice(
     return str(data.get("advice", ""))
 
 
+def request_document_chat(
+    document: dict[str, Any],
+    message: str,
+    history: list[dict[str, str]] | None = None,
+    categories: list[str] | None = None,
+    options: AgentClientOptions | None = None,
+) -> str:
+    """Send one chat turn about a document; return the assistant reply."""
+    options = options or AgentClientOptions()
+    payload = {
+        "document": document,
+        "message": message,
+        "history": history or [],
+        "categories": categories or [],
+        "model": options.model,
+        "temperature": options.temperature,
+    }
+    data = _post_json(f"{options.base_url}/api/document-chat", payload)
+    if "error" in data:
+        raise RuntimeError(data["error"])
+    return str(data.get("reply", ""))
+
+
 def request_executive_report(
     summary: dict[str, Any],
     options: AgentClientOptions | None = None,

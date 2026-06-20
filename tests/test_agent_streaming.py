@@ -11,7 +11,12 @@ import pytest
 # (langgraph). Skip cleanly when it is not installed (e.g. the minimal CI job).
 pytest.importorskip("langgraph")
 
-from invoice_sorter.agent_client import request_executive_report_stream, AgentClientOptions
+from invoice_sorter.agent_client import (
+    AgentClientOptions,
+    request_document_chat,
+    request_executive_report_stream,
+)
+from invoice_sorter import agent_client
 
 
 class MockResponse:
@@ -43,3 +48,24 @@ def test_request_executive_report_stream_reads_ndjson(monkeypatch):
     summary = {"processed": 1}
     chunks = list(request_executive_report_stream(summary, options=AgentClientOptions()))
     assert "".join(chunks) == "Hello world"
+
+
+def test_request_document_chat_posts_and_returns_reply(monkeypatch):
+    captured = {}
+
+    def fake_post_json(url, payload):
+        captured["url"] = url
+        captured["payload"] = payload
+        return {"reply": "File it under Internet."}
+
+    monkeypatch.setattr(agent_client, "_post_json", fake_post_json)
+
+    reply = request_document_chat(
+        {"file_name": "a.pdf"}, "Which category?",
+        history=[{"role": "user", "content": "hi"}],
+        categories=["Internet", "Sonstiges"],
+    )
+    assert reply == "File it under Internet."
+    assert captured["url"].endswith("/api/document-chat")
+    assert captured["payload"]["message"] == "Which category?"
+    assert captured["payload"]["categories"] == ["Internet", "Sonstiges"]

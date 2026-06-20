@@ -73,6 +73,7 @@ Optional backends/extras:
 pip install -e ".[light]"   # pdfplumber/pypdf + pytesseract image OCR (fallback)
 pip install -e ".[docling]" # Docling extraction (best tables/amounts; heavy)
 pip install -e ".[gui]"     # PySide6 desktop app
+pip install -e ".[agent]"   # in-app LangGraph agent (chat / advice / exec report)
 pip install -e ".[docx]"    # DOCX export (planned)
 pip install -e ".[test]"    # pytest
 ```
@@ -160,6 +161,19 @@ buttons open the report and output folder. The work runs in a background thread
 so the window stays responsive. A progress bar shows inspected/total documents.
 **Stop** requests cooperative cancellation: the current document finishes, then
 partial report, audit, and performance outputs are written.
+
+**Chat / Edit a document.** Select a row and click **Chat / Edit** to open a
+dialog that lets you (a) chat with the local agent about that one document
+(it answers from the document's metadata only and can suggest a category from
+your config) and (b) edit the **category** and **metadata** (vendor, dates,
+invoice number, gross/VAT/net, currency) and **Apply** the changes back to the
+results table. Category changes are tracked in the correction log (Undo / Export
+Corrections). Requires the `[agent]` extra and a local Ollama server for chat;
+editing works without them. The non-GUI edit logic lives in
+[corrections.py](src/invoice_sorter/corrections.py) (`apply_document_edits`).
+
+**Generate Exec PDF** renders the Markdown report into a formatted PDF (headings,
+tables, bold) via `QTextDocument.setMarkdown` — it no longer dumps raw Markdown.
 
 ## 7. How dry-run works
 

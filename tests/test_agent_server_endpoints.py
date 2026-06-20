@@ -49,6 +49,50 @@ def test_executive_report_stream_endpoint(monkeypatch):
         handle.shutdown()
 
 
+def test_document_chat_endpoint(monkeypatch):
+    captured = {}
+
+    def fake_run_document_chat(document, message, history=None, base_url=None,
+                               model=None, temperature=0.2, categories=None):
+        captured["message"] = message
+        captured["categories"] = categories
+        return "You could file this under Internet."
+
+    monkeypatch.setattr(agent_service, "run_document_chat", fake_run_document_chat)
+
+    handle = start_handle()
+    try:
+        port = handle.server.server_address[1]
+        url = f"http://127.0.0.1:{port}/api/document-chat"
+        body = {"document": {"file_name": "a.pdf"}, "message": "Which category?",
+                "categories": ["Internet", "Sonstiges"]}
+        payload = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        assert data.get("reply") == "You could file this under Internet."
+        assert captured["message"] == "Which category?"
+        assert captured["categories"] == ["Internet", "Sonstiges"]
+    finally:
+        handle.shutdown()
+
+
+def test_document_chat_endpoint_requires_message(monkeypatch):
+    handle = start_handle()
+    try:
+        port = handle.server.server_address[1]
+        url = f"http://127.0.0.1:{port}/api/document-chat"
+        payload = json.dumps({"document": {"file_name": "a.pdf"}}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False, "expected HTTP 500"
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 500
+    finally:
+        handle.shutdown()
+
+
 def test_document_advice_endpoint(monkeypatch):
     def fake_run_document_advice(document, base_url=None, model=None, temperature=0.2):
         return "Advice for document"

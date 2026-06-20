@@ -243,6 +243,49 @@ def run_executive_report(
     return state["messages"][-1].content
 
 
+def _build_document_chat_prompt(
+    document: dict[str, Any], categories: list[str] | None = None
+) -> str:
+    cat_line = ""
+    if categories:
+        cat_line = "Allowed categories: " + ", ".join(categories) + ". "
+    return (
+        "You are a local invoice sorting assistant chatting with a tax preparer "
+        "about ONE document. Use only the JSON data below; do not invent vendor "
+        "names, dates, amounts, or file contents. " + cat_line +
+        "When asked, suggest the single best category from the allowed list and "
+        "explain briefly. Keep answers concise."
+        "\n\n"
+        "Document JSON:\n"
+        f"{json.dumps(document, ensure_ascii=False, indent=2)}\n"
+    )
+
+
+def run_document_chat(
+    document: dict[str, Any],
+    message: str,
+    history: list[dict[str, str]] | None = None,
+    base_url: str = DEFAULT_OLLAMA_URL,
+    model: str = DEFAULT_OLLAMA_MODEL,
+    temperature: float = 0.2,
+    categories: list[str] | None = None,
+) -> str:
+    """Answer a chat turn about a single document. History is a list of
+    ``{"role": "user"|"assistant", "content": str}`` dicts."""
+    prompt = _build_document_chat_prompt(document, categories)
+    agent = _create_agent(prompt, base_url, model, temperature)
+    messages: list[Any] = []
+    for turn in history or []:
+        content = str(turn.get("content", ""))
+        if turn.get("role") == "assistant":
+            messages.append(AIMessage(content=content))
+        else:
+            messages.append(HumanMessage(content=content))
+    messages.append(HumanMessage(content=message))
+    state = agent.invoke({"messages": messages, "remaining_steps": 5})
+    return state["messages"][-1].content
+
+
 class AgentRequestHandler(BaseHTTPRequestHandler):
     def _send_json(self, data: dict[str, Any], status: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -293,6 +336,23 @@ class AgentRequestHandler(BaseHTTPRequestHandler):
                     temperature=float(payload.get("temperature", 0.2)),
                 )
                 self._send_json({"advice": advice})
+            elif self.path == "/api/document-chat":
+                document = payload.get("document")
+                message = payload.get("message")
+                if not isinstance(document, dict):
+                    raise ValueError("Missing document payload")
+                if not isinstance(message, str) or not message.strip():
+                    raise ValueError("Missing message")
+                reply = run_document_chat(
+                    document,
+                    message,
+                    history=payload.get("history"),
+                    base_url=payload.get("base_url") or DEFAULT_OLLAMA_URL,
+                    model=payload.get("model") or DEFAULT_OLLAMA_MODEL,
+                    temperature=float(payload.get("temperature", 0.2)),
+                    categories=payload.get("categories"),
+                )
+                self._send_json({"reply": reply})
             elif self.path == "/api/executive-report-stream":
                 summary = payload.get("summary")
                 if not isinstance(summary, dict):
@@ -328,14 +388,16 @@ def start_agent_server(
     port: int = DEFAULT_AGENT_PORT,
 ) -> AgentServerHandle:
     server = ThreadingHTTPServer((host, port), AgentRequestHandler)
+    # Record the actually-bound port (matters when port=0 is requested).
+    bound_port = server.server_address[1]
     thread = Thread(
         target=server.serve_forever,
         daemon=True,
         name="InvoiceSorterAgentServer",
     )
     thread.start()
-    print(f"Agent server listening at http://{host}:{port}")
-    return AgentServerHandle(server=server, thread=thread, host=host, port=port)
+    print(f"Agent server listening at http://{host}:{bound_port}")
+    return AgentServerHandle(server=server, thread=thread, host=host, port=bound_port)
 
 
 def run_agent_server(

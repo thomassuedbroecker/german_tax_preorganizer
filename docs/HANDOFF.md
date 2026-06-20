@@ -22,8 +22,17 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **55 pytest passing** (up from 50): added streaming agent tests, GUI ExecReportWorker
-  tests, and server endpoint tests.
+- ✅ **64 pytest passing** locally (CI on `.[test]`: 52 passed, 5 skipped — GUI/agent
+  tests skip without PySide6/langgraph). Added corrections, document-chat, and PDF
+  render tests.
+- ✅ **PDF export renders Markdown** (`render_markdown_to_pdf` in `gui.py` uses
+  `QTextDocument.setMarkdown`) — fixed the bug where the PDF contained raw Markdown.
+- ✅ **Document chat + edit:** select a row → "Chat / Edit" to chat with the local
+  agent about one document and edit its category/metadata. Endpoint
+  `/api/document-chat` + `run_document_chat`; client `request_document_chat`;
+  GUI-free edit logic `corrections.apply_document_edits`.
+- ✅ **CI fix:** agent tests `pytest.importorskip("langgraph")`; new `[agent]` extra
+  (langgraph, langchain-core, pydantic).
 - ✅ Hybrid manual-review verified: **38 processed, 0 unsupported, 16 manual-review, 22
   classified** on real PDFs. Docling text preserved for monetary fields.
 - ✅ Docling verified on Apple Silicon (torch MPS) and **offline** with
@@ -40,6 +49,27 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   double-click source file to open; confidence-based row coloring.
 
 ## Live update log
+
+### 2026-06-20 PDF render fix + document chat/edit (Opus session)
+
+- Fixed CI: two agent test modules imported `langgraph` at collection time, but CI
+  installs only `.[test]`. Added `pytest.importorskip("langgraph")` to them and an
+  `[agent]` extra. Verified clean `.[test]` venv: 52 passed, 5 skipped, exit 0.
+- Fixed the Exec PDF bug: it wrapped raw Markdown in `<pre>` so the PDF showed
+  literal `#`/`|`/`**`. Now `render_markdown_to_pdf()` uses
+  `QTextDocument.setMarkdown`. Added `tests/test_exec_pdf.py` (renders, no raw
+  markup; skips without PySide6/pypdf).
+- Added document chat + edit:
+  - `agent_service.run_document_chat()` + `/api/document-chat` endpoint (history +
+    allowed categories aware).
+  - `agent_client.request_document_chat()`.
+  - `corrections.apply_document_edits()` (GUI-free, locale-aware amount parsing) +
+    `tests/test_corrections.py`.
+  - GUI "Chat / Edit" button → dialog with threaded chat (`ChatWorker`) and editable
+    category/metadata that applies back to the results table and correction log.
+  - Tests: chat endpoint (+ requires-message), chat client. Fixed
+    `start_agent_server` to record the actually-bound port (matters for port=0).
+- Synced README (install `[agent]`, GUI Chat/Edit + PDF render note).
 
 ### 2026-06-20 Streaming & Category Editing
 

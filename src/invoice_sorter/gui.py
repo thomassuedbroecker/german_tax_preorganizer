@@ -42,15 +42,19 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QDialog,
     QTextEdit,
+    QFormLayout,
+    QDialogButtonBox,
 )
 
 from .ai_review import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
 from .agent_client import (
     AgentClientOptions,
     request_document_advice,
+    request_document_chat,
     request_executive_report,
     request_executive_report_stream,
 )
+from .corrections import apply_document_edits
 from .agent_service import DEFAULT_AGENT_HOST, DEFAULT_AGENT_PORT, AgentServerHandle, start_agent_server
 from .config import ConfigError, load_config
 from .extraction_adapter import active_backend
@@ -153,6 +157,34 @@ class ExecReportWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
+
+
+class ChatWorker(QThread):
+    """Runs one document-chat turn off the UI thread (Ollama can be slow)."""
+
+    reply = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, document, message, history, categories, options) -> None:
+        super().__init__()
+        self._document = document
+        self._message = message
+        self._history = history
+        self._categories = categories
+        self._options = options
+
+    def run(self) -> None:
+        try:
+            text = request_document_chat(
+                self._document,
+                self._message,
+                history=self._history,
+                categories=self._categories,
+                options=self._options,
+            )
+            self.reply.emit(text)
+        except Exception as exc:  # surfaced in the dialog
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
 class MainWindow(QMainWindow):
@@ -265,6 +297,9 @@ class MainWindow(QMainWindow):
         self.agent_report_btn = QPushButton("Agent Exec Report")
         self.agent_report_btn.clicked.connect(self._request_executive_report)
         self.agent_report_btn.setEnabled(False)
+        self.chat_btn = QPushButton("Chat / Edit")
+        self.chat_btn.clicked.connect(self._chat_about_document)
+        self.chat_btn.setEnabled(False)
         self.edit_category_btn = QPushButton("Edit Category")
         self.edit_category_btn.clicked.connect(self._edit_category)
         self.edit_category_btn.setEnabled(False)
@@ -282,6 +317,7 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.exec_pdf_btn)
         run_row.addWidget(self.agent_advice_btn)
         run_row.addWidget(self.agent_report_btn)
+        run_row.addWidget(self.chat_btn)
         run_row.addWidget(self.edit_category_btn)
         run_row.addWidget(self.undo_btn)
         run_row.addWidget(self.export_corrections_btn)
@@ -486,6 +522,7 @@ class MainWindow(QMainWindow):
         self.exec_pdf_btn.setEnabled(True)
         self.agent_advice_btn.setEnabled(True)
         self.agent_report_btn.setEnabled(True)
+        self.chat_btn.setEnabled(True)
         self.edit_category_btn.setEnabled(True)
         self.export_corrections_btn.setEnabled(True)
         self._correction_log.clear()
@@ -558,17 +595,7 @@ class MainWindow(QMainWindow):
             from .report import build_report
 
             md = build_report(self._last_results, self._last_summary)
-            # Simple rendering: wrap markdown in <pre> to keep formatting.
-            html = (
-                '<html><head><meta charset="utf-8"><style>body{font-family: "Helvetica", "Arial", sans-serif; padding:20px;} pre{white-space:pre-wrap; font-family: "Helvetica", "Arial", sans-serif;}</style></head><body>'
-                f"<h1>Executive Invoice Summary</h1><pre>{md}</pre></body></html>"
-            )
-            doc = QTextDocument()
-            doc.setHtml(html)
-            printer = QPrinter(QPrinter.HighResolution)
-            printer.setOutputFormat(QPrinter.PdfFormat)
-            printer.setOutputFileName(path)
-            doc.print_(printer)
+            render_markdown_to_pdf(md, path)
             QMessageBox.information(self, "PDF saved", f"Executive PDF written to {path}")
         except Exception as exc:
             QMessageBox.critical(self, "PDF generation failed", str(exc))
@@ -723,6 +750,171 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Agent request failed", str(exc))
 
+    def _doc_payload(self, result) -> dict:
+        m = result.metadata
+        def s(v):
+            return str(v) if v is not None else None
+        return {
+            "file_name": result.source_path.name,
+            "category": result.category,
+            "confidence": result.confidence,
+            "status": result.status.value,
+            "notes": result.notes,
+            "vendor": m.vendor,
+            "invoice_date": m.invoice_date,
+            "invoice_number": m.invoice_number,
+            "gross_amount": s(m.gross_amount),
+            "vat_amount": s(m.vat_amount),
+            "net_amount": s(m.net_amount),
+            "currency": m.currency,
+        }
+
+    def _set_row_from_result(self, row: int, r) -> None:
+        m = r.metadata
+        values = [
+            r.source_path.name, r.category, _cell(m.vendor), _cell(m.invoice_date),
+            _cell(m.gross_amount), _cell(m.currency), f"{r.confidence:.2f}",
+            r.status.value, "; ".join(r.notes),
+        ]
+        for col, val in enumerate(values):
+            item = self.table.item(row, col)
+            if item is None:
+                item = QTableWidgetItem(val)
+                self.table.setItem(row, col, item)
+            else:
+                item.setText(val)
+        first = self.table.item(row, 0)
+        if first is not None:
+            first.setData(Qt.UserRole, str(r.source_path))
+
+    def _chat_about_document(self) -> None:
+        """Chat with the local agent about the selected document and edit its
+        category/metadata."""
+        if not getattr(self, "_last_results", None):
+            QMessageBox.warning(self, "No data", "Run the sorter first.")
+            return
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self._last_results):
+            QMessageBox.warning(self, "Select row", "Select one document row first.")
+            return
+        result = self._last_results[row]
+
+        try:
+            cfg = load_config(self.config_edit.text().strip() or str(_DEFAULT_CONFIG))
+            categories = cfg.category_names()
+        except Exception:
+            categories = []
+
+        host = self.agent_host_edit.text().strip() or "127.0.0.1"
+        port = int(self.agent_port_edit.text().strip() or "8080")
+        options = AgentClientOptions(
+            base_url=f"http://{host}:{port}",
+            model=self.ai_model_edit.text().strip() or None,
+            temperature=float(self.ai_temperature.value()),
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Chat / Edit — {result.source_path.name}")
+        dialog.resize(620, 620)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(
+            f"<b>{result.source_path.name}</b> · {result.category} · "
+            f"confidence {result.confidence:.2f}"
+        ))
+
+        transcript = QTextEdit(dialog)
+        transcript.setReadOnly(True)
+        layout.addWidget(transcript, 1)
+
+        chat_row = QHBoxLayout()
+        chat_input = QLineEdit(dialog)
+        chat_input.setPlaceholderText("Ask the agent about this document…")
+        send_btn = QPushButton("Send", dialog)
+        chat_row.addWidget(chat_input, 1)
+        chat_row.addWidget(send_btn)
+        layout.addLayout(chat_row)
+
+        # --- editable category + metadata ---
+        form = QFormLayout()
+        cat_combo = QComboBox(dialog)
+        cat_combo.setEditable(True)
+        if categories:
+            cat_combo.addItems(categories)
+        cur = result.category
+        if cur and categories and cur in categories:
+            cat_combo.setCurrentIndex(categories.index(cur))
+        else:
+            cat_combo.setEditText(cur or "")
+        form.addRow("Category", cat_combo)
+
+        m = result.metadata
+        def field(value) -> QLineEdit:
+            return QLineEdit("" if value is None else str(value), dialog)
+        edits_widgets = {
+            "vendor": field(m.vendor),
+            "invoice_date": field(m.invoice_date),
+            "invoice_number": field(m.invoice_number),
+            "gross_amount": field(m.gross_amount),
+            "vat_amount": field(m.vat_amount),
+            "net_amount": field(m.net_amount),
+            "currency": field(m.currency),
+        }
+        for label, widget in edits_widgets.items():
+            form.addRow(label.replace("_", " ").title(), widget)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(dialog)
+        apply_btn = buttons.addButton("Apply changes", QDialogButtonBox.AcceptRole)
+        close_btn = buttons.addButton(QDialogButtonBox.Close)
+        layout.addWidget(buttons)
+
+        history: list[dict[str, str]] = []
+
+        def on_send() -> None:
+            message = chat_input.text().strip()
+            if not message:
+                return
+            transcript.append(f"<b>You:</b> {message}")
+            chat_input.clear()
+            send_btn.setEnabled(False)
+            worker = ChatWorker(self._doc_payload(result), message, list(history), categories, options)
+            self._chat_worker = worker
+
+            def on_reply(text: str) -> None:
+                transcript.append(f"<b>Agent:</b> {text}")
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": text})
+                send_btn.setEnabled(True)
+
+            def on_fail(err: str) -> None:
+                transcript.append(f"<i>Agent error: {err}</i>")
+                send_btn.setEnabled(True)
+
+            worker.reply.connect(on_reply)
+            worker.failed.connect(on_fail)
+            worker.start()
+
+        def on_apply() -> None:
+            old_category = result.category
+            edits: dict[str, str] = {"category": cat_combo.currentText().strip()}
+            for key, widget in edits_widgets.items():
+                edits[key] = widget.text()
+            changes = apply_document_edits(result, edits)
+            if not changes:
+                QMessageBox.information(dialog, "No changes", "Nothing to apply.")
+                return
+            if result.category != old_category:
+                self._correction_log.add_change(row, old_category, result.category)
+                self.undo_btn.setEnabled(True)
+            self._set_row_from_result(row, result)
+            QMessageBox.information(dialog, "Applied", "Updated:\n- " + "\n- ".join(changes))
+
+        send_btn.clicked.connect(on_send)
+        chat_input.returnPressed.connect(on_send)
+        apply_btn.clicked.connect(on_apply)
+        close_btn.clicked.connect(dialog.reject)
+        dialog.exec()
+
     def _request_executive_report(self) -> None:
         if not getattr(self, "_last_results", None) or not getattr(self, "_last_summary", None):
             QMessageBox.warning(self, "No data", "Run the sorter first to request an executive report.")
@@ -787,6 +979,20 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Export complete", f"Wrote CSV to {path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export failed", str(exc))
+
+
+def render_markdown_to_pdf(markdown_text: str, path: str) -> None:
+    """Render Markdown to a formatted PDF (headings, tables, bold).
+
+    Uses ``QTextDocument.setMarkdown`` so the PDF contains rendered content, not
+    the raw Markdown source. Kept module-level so it is unit-testable.
+    """
+    doc = QTextDocument()
+    doc.setMarkdown(markdown_text)
+    printer = QPrinter(QPrinter.HighResolution)
+    printer.setOutputFormat(QPrinter.PdfFormat)
+    printer.setOutputFileName(path)
+    doc.print_(printer)
 
 
 def main() -> int:
