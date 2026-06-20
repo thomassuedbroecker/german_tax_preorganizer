@@ -3,9 +3,9 @@
 ## Development Provenance
 
 This repository has been developed with human direction and review and with
-assistance from coding tools, including Claude Code and OpenAI Codex. The project
-owner selected requirements, reviewed changes, ran tests, and accepted the
-resulting implementation.
+assistance from GitHub Copilot, OpenAI Codex, and Claude Code. The project owner
+selected requirements, reviewed changes, ran tests, and accepted the resulting
+implementation.
 
 The files under `prompts/` document development interactions and requirements.
 They are not runtime prompts loaded by the application.
@@ -32,15 +32,22 @@ The optional Ollama integration has two components:
    names, dates, amounts) — never full invoice text — is sent to the local Ollama
    instance.
 
-2. **Agent REST service** (new): `agent_service.py` runs a LangGraph agent
-   endpoint locally on `127.0.0.1:8080`. Two endpoints:
+2. **Agent REST service**: `agent_service.py` runs a LangGraph/Ollama service
+   locally on `127.0.0.1:8080`. It exposes:
+   - `GET /api/health`: Reports local service readiness.
    - `/api/document-advice`: Accepts a single document result, returns AI-generated
      advice on the classification decision.
+   - `/api/document-chat`: Answers a chat turn from one document's metadata,
+     optional history, and configured category names.
+   - `/api/executive-report`: Returns a synchronous executive report.
    - `/api/executive-report-stream`: Accepts a run summary, streams back an
      executive report as newline-delimited JSON chunks (real-time display in GUI).
 
    The agent wraps Ollama for inference. Full invoice text is never sent; only
    extracted metadata fields (vendor, category, confidence, etc.) are provided.
+   Separate model defaults are used for reasoning-oriented review/advice,
+   longer executive synthesis, and latency-sensitive chat. All defaults can be
+   overridden through environment variables or GUI fields.
 
 ## External Artifacts
 

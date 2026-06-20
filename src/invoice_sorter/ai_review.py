@@ -23,16 +23,16 @@ from .report import RunSummary, normalize_markdown_fragment
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 
-# Per-use-case default models. These are tuned for commonly-installed local
-# Ollama models and can each be overridden by an environment variable. Change
-# them freely to models you have (`ollama list`).
-#   general fallback + post-sort AI review: a reasoning model
+# Per-use-case defaults selected from the target workstation's installed Ollama
+# models. They are operational tradeoffs, not universal benchmark winners, and
+# each can be overridden by an environment variable.
+#   post-sort review/general fallback: reasoning-focused, moderate local footprint
 DEFAULT_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
-#   per-document advice: reasoning about whether manual review is needed
+#   per-document advice: reasoning-focused assessment of review risk
 DEFAULT_ADVICE_MODEL = os.environ.get("OLLAMA_ADVICE_MODEL", "deepseek-r1:8b")
-#   executive report: largest/most capable model for the high-stakes synthesis
+#   executive report: largest installed default for longer structured synthesis
 DEFAULT_REPORT_MODEL = os.environ.get("OLLAMA_REPORT_MODEL", "qwen3-coder:30b")
-#   interactive chat: a small, fast model for responsiveness
+#   interactive chat: smaller model chosen to reduce turn latency
 DEFAULT_CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "granite4:tiny-h")
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)

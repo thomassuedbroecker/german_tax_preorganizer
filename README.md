@@ -4,8 +4,25 @@
 [![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue.svg)](LICENSE)
 
 _Note: This project and its documentation were developed with AI assistance
-(including Claude Code and OpenAI Codex) under human direction and review. See
+(GitHub Copilot, OpenAI Codex, and Claude Code) under human direction and review. See
 [CONTENT_PROVENANCE.md](CONTENT_PROVENANCE.md) for details._
+
+## Multi-agent IDE collaboration example
+
+This repository is also a practical example of using **three different agentic
+coding plug-ins in one Visual Studio Code workspace: GitHub Copilot, OpenAI
+Codex, and Claude Code. The tools do not share
+their context windows or token budgets automatically. Instead,
+[docs/HANDOFF.md](docs/HANDOFF.md) acts as the shared continuity document: each
+agent reads the current status, continues a bounded task, records changes and
+verification evidence, documents known limitations, and identifies the next
+work item.
+
+This workflow lets a developer rotate between tools when an individual context
+window or token allowance is exhausted and combine their complementary
+capabilities without losing project state. The interaction history under
+[`prompts/`](prompts/) provides additional traceability; all resulting changes
+remain subject to human review.
 
 A **local-first** command-line tool that scans a folder of PDF and image
 invoices/receipts, extracts metadata, classifies each document into configurable
@@ -19,7 +36,9 @@ For the shortest setup and first dry run, see
 [docs/QUICK_START.md](docs/QUICK_START.md).
 
 For system design, architecture, data flow, and module responsibilities, see
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[ARCHITECTURE.md](ARCHITECTURE.md). The editable
+[Draw.io architecture diagrams](docs/invoice_sorter_architecture.drawio) contain
+separate static-structure and dynamic-flow pages.
 
 ## 1. What the tool does
 
@@ -157,7 +176,7 @@ choose a backend (**Auto**, **Docling**, or **Light**), optionally enable
 (manual-review rows shown dark red with white text, failures light red,
 high-confidence values green); double-click a row to open the source invoice
 file.
-buttons open the report and output folder. The work runs in a background thread
+Buttons open the report and output folder. The work runs in a background thread
 so the window stays responsive. A progress bar shows inspected/total documents.
 **Stop** requests cooperative cancellation: the current document finishes, then
 partial report, audit, and performance outputs are written.
@@ -179,14 +198,21 @@ edits and undo remain attached to the correct documents after table sorting.
 **Models are per-feature.** The **AI review model** field drives the post-sort
 review, and a separate **Agent models** row lets you pick a different Ollama
 model for **Advice**, **Exec Report**, and **Chat** independently. Sensible
-per-use-case defaults are used (and each is overridable by an env var):
+per-use-case defaults are used (and each is overridable by an environment
+variable):
 
-| Use case | Default model | Env override |
-|---|---|---|
-| AI review + general fallback | `deepseek-r1:8b` | `OLLAMA_MODEL` |
-| Document Advice | `deepseek-r1:8b` | `OLLAMA_ADVICE_MODEL` |
-| Executive Report | `qwen3-coder:30b` | `OLLAMA_REPORT_MODEL` |
-| Chat | `granite4:tiny-h` | `OLLAMA_CHAT_MODEL` |
+| Use case | Default model | Why this default | Environment override |
+|---|---|---|---|
+| AI review + general fallback | `deepseek-r1:8b` | Reasoning-focused model with a moderate local footprint for checking counts, confidence signals, and exceptions. | `OLLAMA_MODEL` |
+| Document Advice | `deepseek-r1:8b` | The same reasoning behavior fits a focused decision about whether one document needs manual review. | `OLLAMA_ADVICE_MODEL` |
+| Executive Report | `qwen3-coder:30b` | The largest installed default is reserved for the longer structured synthesis across the complete run summary. | `OLLAMA_REPORT_MODEL` |
+| Chat | `granite4:tiny-h` | The smaller model reduces interactive turn latency while answering from one document's metadata. | `OLLAMA_CHAT_MODEL` |
+
+These are practical defaults for the models installed on the target workstation,
+not claims that one model is universally best. Available memory, response time,
+language quality, and local evaluation results may justify different choices.
+Environment overrides are read when the application starts; the GUI fields can
+also override them for the current run.
 
 Set them to models you have installed (`ollama list`). If a model is missing you
 get a clear "pull it or choose another" message instead of an opaque error.
@@ -243,7 +269,10 @@ git-ignored local override before editing:
 cp config/ai_review_prompt.txt config/ai_review_prompt.local.txt
 ```
 
-Keep `{json_data}` where the anonymized inspection payload should be inserted.
+Keep `{json_data}` where the privacy-filtered inspection payload should be
+inserted. Document IDs are pseudonymized, but the payload can contain extracted
+metadata such as vendor, date, invoice number, amount, and currency for
+low-confidence documents. It never contains full extracted invoice text.
 If the placeholder is omitted, the application appends the JSON data after the
 custom instructions. Run with:
 
@@ -334,13 +363,15 @@ with low confidence, or confidence is below the configured threshold.
 - Optional **DOCX** export for Apple Pages.
 - Optional local **Ollama** assist for classification tie-breaks (augmenting, not
   replacing, the rule-based result), following the author's `pdf_extraction_macos`
-  project. The current Ollama integration is report review only. The
+  project. Current Ollama features provide post-sort review, document advice,
+  document chat, and executive reports; they do not change classification. The
   `docling_preprocessor_factory` repo can be wired into
   `extraction_adapter._extract_with_factory` if preferred over plain Docling.
 
 Done already: CLI, Docling backend, hybrid extraction, backend selection,
-optional local Ollama report review, **PySide6 desktop GUI**, rule-based
-classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
+optional local Ollama review/advice/chat/reporting, **PySide6 desktop GUI**,
+rule-based classifier, Markdown report, JSONL audit log, dry-run, real-data
+tuning script.
 
 ## 12. Licensing and provenance
 
@@ -352,12 +383,15 @@ classifier, Markdown report, JSONL audit log, dry-run, real-data tuning script.
 Third-party packages and optional model artifacts retain their own terms. Before
 shipping a bundled application, generate a resolved dependency/SBOM report and
 review the exact PySide6/Qt, Docling, OCR, and model distribution configuration.
+Built wheel and source archives include the project license, license policy, and
+third-party notices. The source manifest explicitly excludes private
+`config/*.local.*` files.
 
 ## Project structure
 
 ```
 german_tax_preorganizer/
-  pyproject.toml                 # py3.12; extras: docling, light, gui, docx, test
+  pyproject.toml                 # py3.12; extras: docling, light, gui, agent, docx, test
   config/
     categories.yaml              # generic, committed
     categories.local.yaml        # git-ignored, your private vendors
@@ -378,7 +412,7 @@ german_tax_preorganizer/
     performance_log.py           # anonymized extraction/Ollama timing + tokens
     report.py                    # Markdown report (RunSummary + build_report)
     config.py / constants.py / models.py
-  tests/                         # pytest (50 tests with GUI extra installed)
+  tests/                         # pytest suite (optional-feature tests skip if unavailable)
   examples/sample_invoice_summary.md
   tax_input_docs/                # git-ignored real invoices (not in repo)
 ```
@@ -391,5 +425,5 @@ The engine is UI-agnostic: both `cli.py` and `gui.py` call
 ```bash
 pip install -e ".[test]"
 python scripts/check_license_metadata.py
-pytest          # 50 tests with GUI extra installed
+pytest
 ```

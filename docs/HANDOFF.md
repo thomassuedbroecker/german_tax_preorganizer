@@ -22,7 +22,7 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ Rule-based classifier + confidence + manual-review routing.
 - ✅ Markdown report (11 sections) + JSONL audit log.
 - ✅ `scripts/suggest_local_config.py` — builds a git-ignored `categories.local.yaml`.
-- ✅ **70 pytest passing** locally; CI on `.[test]` skips GUI/agent/PDF tests
+- ✅ **74 pytest passing** locally; CI on `.[test]` skips GUI/agent/PDF tests
   without PySide6/langgraph/pypdf; pure tests run.
 - ✅ **PDF export renders Markdown** (`render_markdown_to_pdf` in `gui.py` uses
   `QTextDocument.setMarkdown`). Model-generated AI reviews are normalized to
@@ -40,8 +40,8 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
 - ✅ **Streaming Agent Integration (NEW):** LangGraph agent REST service runs in-app
   (`agent_service.py`). `/api/executive-report-stream` endpoint returns newline-delimited
   JSON chunks. GUI `ExecReportWorker` (QThread) consumes stream, displays in modal dialog.
-- ✅ **GitHub Actions CI (NEW):** `.github/workflows/ci.yml` runs pytest across
-  ubuntu/macos × Python 3.11/3.12 matrix.
+- ✅ **GitHub Actions CI:** `.github/workflows/ci.yml` runs pytest on Ubuntu and
+  macOS with the project's required Python 3.12.
 - ✅ **Category Editing (NEW):** Double-click Category column or use "Edit Category" button
   to change. "Undo Last Change" reverts edits. "Export Corrections" saves as CSV for audit.
   Changes tracked in in-memory `CorrectionLog`.
@@ -57,6 +57,72 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   double-click source file to open; confidence-based row coloring.
 
 ## Live update log
+
+### 2026-06-20 development-tool provenance clarification
+
+- README and `CONTENT_PROVENANCE.md` now explicitly identify the three agentic
+  development tools used in the shared VS Code workflow: **GitHub Copilot,
+  OpenAI Codex, and Claude Code**.
+- Added a documentation-contract test to prevent the three-tool provenance list
+  from drifting between the two maintained documents.
+- Verification: `.venv/bin/python -m pytest -q` → **74 passed**; license metadata
+  and `git diff --check` passed.
+
+### 2026-06-20 license and distribution validation (Codex continuation)
+
+- Confirmed the repository `LICENSE` matches the SPDX `BSD-2-Clause` text and
+  that `pyproject.toml` emits `License-Expression: BSD-2-Clause`.
+- Added `MANIFEST.in` and expanded `license-files` so wheel/sdist artifacts ship
+  `LICENSE`, `LICENSE_POLICY.md`, and `THIRD_PARTY_NOTICES.md`; the sdist also
+  includes maintained provenance/architecture/configuration documentation.
+- Explicitly excluded `config/*.local.*` after an artifact build caught that a
+  wildcard could package the private local category configuration.
+- Corrected the PySide6 community-wheel expression and clarified that commercial
+  Qt for Python is a separately obtained distribution.
+- Corrected Pillow's current identifier from the historical HPND wording to
+  `MIT-CMU` based on its upstream license, and normalized the python-dateutil
+  dual-license expression.
+- Aligned the package author with the `LICENSE` copyright owner and documented
+  the separate redistribution review required for external Ollama/model assets.
+- Strengthened `scripts/check_license_metadata.py` to validate BSD clauses,
+  exact dependency notice rows and expected licenses, artifact license
+  declarations, manifest coverage, and private-config exclusion.
+- Verification: metadata checker passed for all **14 direct dependencies/extras**;
+  wheel and sdist were rebuilt and inspected; `pip check` passed; full pytest
+  **73 passed**; compileall and `git diff --check` passed.
+- Remaining release caveat: no resolved lockfile/SBOM is committed. Before
+  distributing a bundled GUI, generate an SBOM for the exact environment and
+  review PySide6/Qt, Docling transitive dependencies, and downloaded model terms.
+
+### 2026-06-20 editable architecture diagrams (Codex continuation)
+
+- Added `docs/invoice_sorter_architecture.drawio`, an uncompressed editable
+  Draw.io file with two pages:
+  - **Static Structure:** local workstation/privacy boundary, CLI/GUI,
+    orchestrator and deterministic pipeline modules, outputs, agent REST service,
+    direct AI review, and local Ollama.
+  - **Dynamic Flow:** document-processing loop, cooperative cancellation,
+    outputs, direct optional `--ai-review`, and GUI advice/chat/executive-report
+    request/streaming sequences.
+- Linked the diagrams from README and `ARCHITECTURE.md` and added a contract test
+  that parses the XML and verifies both pages and documentation links.
+- Verification: `.venv/bin/python -m pytest -q` → **73 passed**; Draw.io XML,
+  compileall, and `git diff --check` passed.
+
+### 2026-06-20 documentation/code alignment (Codex continuation)
+
+- Documented why each workload uses a different local model and clarified that
+  these are operational defaults for the installed model set, not universal
+  benchmark rankings. Code comments, README, Quick Start, architecture, and
+  provenance now agree on defaults, overrides, privacy boundaries, and uses.
+- Aligned architecture with implemented batch editing, all five local REST
+  routes (including health), Python 3.12 CI, actual dependencies, copy/move
+  behavior, and measured performance telemetry. Removed stale drag/drop,
+  atomic-write, Python 3.11, completed batch-edit, and report-review-only claims.
+- Added `tests/test_documentation_sync.py` to guard model-default and endpoint
+  documentation contracts.
+- Verification: `.venv/bin/python -m pytest -q` → **72 passed**; license metadata,
+  compileall, and `git diff --check` passed.
 
 ### 2026-06-20 fenced AI Markdown PDF fix (Codex continuation)
 
@@ -160,7 +226,7 @@ From a manual UI test, fixed:
   - `test_executive_report_stream_endpoint` + `test_document_advice_endpoint`: start ephemeral server, verify endpoints.
   - All 55 tests passing.
 - Created GitHub Actions CI workflow `.github/workflows/ci.yml`:
-  - Matrix: ubuntu/macos × Python 3.11/3.12.
+  - Current matrix: Ubuntu/macOS with Python 3.12.
   - Steps: checkout, setup Python, install deps, run pytest.
   - QT_QPA_PLATFORM=offscreen for headless GUI tests.
   - Committed to `ci/add-github-actions` branch, merged to main.
@@ -374,7 +440,7 @@ fc6148d ci: add GitHub Actions CI matrix (OS+Python)
 
 Key files changed/added:
 - Added: `ARCHITECTURE.md` — system design, data flow, module responsibilities.
-- Added: `.github/workflows/ci.yml` — GitHub Actions matrix (ubuntu/macos × 3.11/3.12).
+- Added: `.github/workflows/ci.yml` — GitHub Actions matrix (Ubuntu/macOS × Python 3.12).
 - Added: `tests/test_agent_streaming.py`, `tests/test_exec_stream_gui.py`, `tests/test_agent_server_endpoints.py`.
 - Modified: `src/invoice_sorter/agent_service.py` (streaming endpoint + ndjson helper).
 - Modified: `src/invoice_sorter/agent_client.py` (streaming client generator).
@@ -383,4 +449,4 @@ Key files changed/added:
 - Modified: `docs/HANDOFF.md` (this file).
 - Modified: `CONTENT_PROVENANCE.md` (updated AI integration notes).
 
-Repo is on `main`. Current local verification: **70 tests passed**.
+Repo is on `main`. Current local verification: **74 tests passed**.

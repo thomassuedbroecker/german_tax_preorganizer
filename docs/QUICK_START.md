@@ -175,6 +175,13 @@ The AI review runs after sorting. It does not change categories, copy files, or
 replace the rule-based classifier. It receives aggregate counts and extracted
 metadata only, never full invoice text.
 
+The GUI uses separate defaults because the workloads differ: `deepseek-r1:8b`
+handles reasoning-oriented review and document advice, `qwen3-coder:30b` is
+reserved for the longer structured executive report, and `granite4:tiny-h`
+keeps interactive chat responsive. These are local operational defaults rather
+than universal model rankings. See the model table in [README.md](../README.md)
+for environment overrides and selection tradeoffs.
+
 Ollama inference duration and prompt/output token counts are shown in the report
 and stored in `performance_log.json`. The same log includes anonymized
 per-document extraction and processing times.
@@ -185,8 +192,10 @@ To customize the inspection instructions:
 cp config/ai_review_prompt.txt config/ai_review_prompt.local.txt
 ```
 
-Edit the local file and keep `{json_data}` where the anonymized payload should
-appear, then add:
+Edit the local file and keep `{json_data}` where the privacy-filtered payload
+should appear. Document IDs are pseudonymized, but extracted metadata for
+low-confidence documents can be included; full invoice text is never included.
+Then add:
 
 ```bash
 --ai-prompt config/ai_review_prompt.local.txt

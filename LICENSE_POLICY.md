@@ -40,10 +40,14 @@ When distributing binaries, applications, or bundled environments:
 
 ## Contributions and AI Assistance
 
-Contributors must submit code they are authorized to contribute and must preserve
-applicable notices. AI-assisted development does not remove the requirement to
-review code for correctness, security, public-code similarity, and license
-obligations. Repository-specific provenance notes are in
+Unless a separate written agreement says otherwise, contributions intentionally
+submitted for inclusion in this project are provided under the project's
+BSD-2-Clause license. Contributors must submit only material they are authorized
+to contribute and must preserve applicable notices.
+
+AI-assisted development does not remove the requirement to review code for
+correctness, security, public-code similarity, and license obligations.
+Repository-specific provenance notes are in
 [CONTENT_PROVENANCE.md](CONTENT_PROVENANCE.md).
 
 This document describes repository policy and is not legal advice.
