@@ -7,6 +7,10 @@ import urllib.request
 
 import pytest
 
+# agent_client imports agent_service, which needs the optional [agent] extra
+# (langgraph). Skip cleanly when it is not installed (e.g. the minimal CI job).
+pytest.importorskip("langgraph")
+
 from invoice_sorter.agent_client import request_executive_report_stream, AgentClientOptions
 
 

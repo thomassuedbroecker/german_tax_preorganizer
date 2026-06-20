@@ -9,6 +9,10 @@ import time
 
 import pytest
 
+# The in-app agent service needs the optional [agent] extra (langgraph). Skip
+# these tests cleanly when it is not installed (e.g. the minimal CI job).
+pytest.importorskip("langgraph")
+
 from invoice_sorter import agent_service
 
 

@@ -31,6 +31,8 @@ light = ["pdfplumber>=0.11", "pypdf>=4.0", "pytesseract>=0.3.13", "Pillow>=10.0"
 # Optional DOCX export (Phase 7), desktop GUI, and tests.
 docx = ["python-docx>=1.1"]
 gui = ["PySide6>=6.6"]
+# Optional in-app LangGraph agent service (executive report / document advice).
+agent = ["langgraph>=0.2", "langchain-core>=0.3", "pydantic>=2.0"]
 test = ["pytest>=8.0"]
 
 [project.scripts]
