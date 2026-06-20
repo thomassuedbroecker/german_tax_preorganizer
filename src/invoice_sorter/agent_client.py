@@ -27,6 +27,16 @@ def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        # The server returns {"error": "..."} on non-2xx; surface that message
+        # instead of a bare "HTTP Error 500".
+        detail = ""
+        try:
+            body = exc.read().decode("utf-8")
+            detail = json.loads(body).get("error", "") or body.strip()
+        except Exception:
+            detail = str(exc)
+        raise RuntimeError(detail or f"Agent request failed: {exc}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Agent request failed: {exc}") from exc
     try:

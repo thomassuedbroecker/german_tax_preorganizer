@@ -172,6 +172,13 @@ Corrections). Requires the `[agent]` extra and a local Ollama server for chat;
 editing works without them. The non-GUI edit logic lives in
 [corrections.py](src/invoice_sorter/corrections.py) (`apply_document_edits`).
 
+**Models are per-feature.** The **AI review model** field drives the post-sort
+review, and a separate **Agent models** row lets you pick a different Ollama
+model for **Advice**, **Exec Report**, and **Chat** independently. All default to
+`llama3.2`; set them to a model you have installed (e.g. `ollama pull llama3.2`,
+or pick an existing one). If a model is missing you get a clear "pull it or
+choose another" message instead of an opaque error.
+
 **Generate Exec PDF** renders the Markdown report into a formatted PDF (headings,
 tables, bold) via `QTextDocument.setMarkdown` — it no longer dumps raw Markdown.
 

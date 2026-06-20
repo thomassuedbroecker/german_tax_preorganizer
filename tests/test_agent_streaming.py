@@ -50,6 +50,27 @@ def test_request_executive_report_stream_reads_ndjson(monkeypatch):
     assert "".join(chunks) == "Hello world"
 
 
+def test_post_json_surfaces_server_error(monkeypatch):
+    # A 500 from the server carries {"error": "..."} — the client must surface it,
+    # not a bare "HTTP Error 500".
+    import io
+    import urllib.error
+
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(
+            url="http://x/api/document-chat", code=500, msg="Internal Server Error",
+            hdrs=None,
+            fp=io.BytesIO(b'{"error": "Ollama model \'llama3.2\' not found"}'),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError) as exc:
+        agent_client._post_json("http://x/api/document-chat", {"a": 1})
+    assert "llama3.2" in str(exc.value)
+    assert "HTTP Error 500" not in str(exc.value)
+
+
 def test_request_document_chat_posts_and_returns_reply(monkeypatch):
     captured = {}
 

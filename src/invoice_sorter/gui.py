@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         self.ai_temperature.setDecimals(2)
         self.ai_temperature.setSingleStep(0.1)
         self.ai_temperature.setValue(0.2)
-        form.addWidget(QLabel("Ollama model"), 3, 0)
+        form.addWidget(QLabel("AI review model"), 3, 0)
         form.addWidget(self.ai_model_edit, 3, 1)
         form.addWidget(QLabel("Ollama URL"), 4, 0)
         form.addWidget(self.ai_url_edit, 4, 1)
@@ -250,6 +250,19 @@ class MainWindow(QMainWindow):
         form.addWidget(QLabel("Agent port"), 8, 0)
         form.addWidget(self.agent_port_edit, 8, 1)
         root.addLayout(form)
+
+        # Per-feature agent models (each can use a different Ollama model).
+        self.advice_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
+        self.report_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
+        self.chat_model_edit = QLineEdit(DEFAULT_OLLAMA_MODEL)
+        agent_models_row = QHBoxLayout()
+        agent_models_row.addWidget(QLabel("Agent models —  Advice:"))
+        agent_models_row.addWidget(self.advice_model_edit)
+        agent_models_row.addWidget(QLabel("Exec Report:"))
+        agent_models_row.addWidget(self.report_model_edit)
+        agent_models_row.addWidget(QLabel("Chat:"))
+        agent_models_row.addWidget(self.chat_model_edit)
+        root.addLayout(agent_models_row)
 
         # --- options ----------------------------------------------------
         opts = QHBoxLayout()
@@ -729,7 +742,11 @@ class MainWindow(QMainWindow):
         try:
             host = self.agent_host_edit.text().strip() or "127.0.0.1"
             port = int(self.agent_port_edit.text().strip() or "8080")
-            options = AgentClientOptions(base_url=f"http://{host}:{port}")
+            options = AgentClientOptions(
+                base_url=f"http://{host}:{port}",
+                model=self.advice_model_edit.text().strip() or None,
+                temperature=float(self.ai_temperature.value()),
+            )
             row = self.table.currentRow()
             if row < 0:
                 QMessageBox.warning(self, "Select row", "Select one document row first.")
@@ -809,7 +826,7 @@ class MainWindow(QMainWindow):
         port = int(self.agent_port_edit.text().strip() or "8080")
         options = AgentClientOptions(
             base_url=f"http://{host}:{port}",
-            model=self.ai_model_edit.text().strip() or None,
+            model=self.chat_model_edit.text().strip() or None,
             temperature=float(self.ai_temperature.value()),
         )
 
@@ -922,7 +939,11 @@ class MainWindow(QMainWindow):
         try:
             host = self.agent_host_edit.text().strip() or "127.0.0.1"
             port = int(self.agent_port_edit.text().strip() or "8080")
-            options = AgentClientOptions(base_url=f"http://{host}:{port}")
+            options = AgentClientOptions(
+                base_url=f"http://{host}:{port}",
+                model=self.report_model_edit.text().strip() or None,
+                temperature=float(self.ai_temperature.value()),
+            )
             summary_payload = {
                 "total_scanned": self._last_summary.total_scanned,
                 "processed": len(self._last_results),

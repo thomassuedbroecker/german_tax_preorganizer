@@ -106,6 +106,19 @@ def _call_ollama(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("error", "")
+        except Exception:
+            detail = ""
+        if exc.code == 404:
+            raise RuntimeError(
+                f"Ollama model '{model}' not found. Pull it with `ollama pull {model}` "
+                f"or choose an installed model in the Ollama model field. "
+                f"({detail or exc})"
+            ) from exc
+        raise RuntimeError(f"Ollama request failed: {detail or exc}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Ollama request failed: {exc}") from exc
     except TimeoutError as exc:

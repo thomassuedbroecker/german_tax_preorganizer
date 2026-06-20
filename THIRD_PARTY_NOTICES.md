@@ -5,7 +5,7 @@ by its own license. This inventory covers direct dependencies declared in
 `pyproject.toml`; it does not replace the license files distributed with those
 packages.
 
-Last reviewed: 2026-06-19.
+Last reviewed: 2026-06-20.
 
 | Dependency | Use | Declared license | Installation |
 |---|---|---|---|
@@ -19,6 +19,9 @@ Last reviewed: 2026-06-19.
 | Docling | Document extraction | MIT | `docling` extra |
 | PySide6 | Desktop GUI | LGPL-3.0-only or commercial/GPL alternatives | `gui` extra |
 | python-docx | Planned DOCX output | MIT | `docx` extra |
+| langgraph | In-app agent orchestration | MIT | `agent` extra |
+| langchain-core | Agent message/model abstractions | MIT | `agent` extra |
+| pydantic | Agent data validation | MIT | `agent` extra |
 | pytest | Tests | MIT | `test` extra |
 
 ## Important Packaging Notes

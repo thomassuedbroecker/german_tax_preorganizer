@@ -70,6 +70,16 @@ organizing invoices for a tax advisor. **Everything runs on-machine.**
   - Tests: chat endpoint (+ requires-message), chat client. Fixed
     `start_agent_server` to record the actually-bound port (matters for port=0).
 - Synced README (install `[agent]`, GUI Chat/Edit + PDF render note).
+- Surfaced real agent errors: `agent_client._post_json` now reads the server's
+  `{"error": ...}` body instead of showing a bare "HTTP Error 500"; `_call_ollama`
+  turns a 404 into "model 'X' not found — pull it or pick another". Added
+  `tests/test_post_json_surfaces_server_error`.
+- Per-feature agent models: separate GUI fields for **Advice**, **Exec Report**,
+  and **Chat** (`advice_model_edit` / `report_model_edit` / `chat_model_edit`);
+  the existing field is now the **AI review** model. Previously Advice/Exec Report
+  ignored the model field and always used the default `llama3.2`. Also added
+  `THIRD_PARTY_NOTICES.md` entries for langgraph/langchain-core/pydantic so the
+  license check passes. Local suite: 65 passed.
 
 ### 2026-06-20 Streaming & Category Editing
 
